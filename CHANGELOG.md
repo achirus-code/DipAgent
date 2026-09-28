@@ -2,6 +2,19 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.0] – 2026-09-29
+
+### Added
+
+- **Strategy "AI decides".** Claude (`claude-opus-5`) gets a market brief every N minutes – price, changes over
+  1 h / 4 h / 24 h / 72 h, volatility of the last 4 h and 24 h, 24 h range, distance to the 72 h high and low, the
+  last hourly closes, fees and the open position – and decides itself whether to buy, wait, hold or sell, with a
+  short reason in English and German that ends up in the bot status and the trade. Optionally it may run a few
+  web searches for news and market sentiment first. Needs `ANTHROPIC_API_KEY` on the agent (add-on option
+  `anthropic_api_key`); every check costs a few cents. The safety net applies: a sell below break-even is held
+  back, only the bot's stop-loss may realize a loss. The app shows a hint in the bot editor while the agent has
+  no key (`GET /api/status` reports `ai_configured`).
+
 ## [1.3.0] – 2026-09-28
 
 ### Changed
