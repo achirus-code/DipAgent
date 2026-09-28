@@ -81,6 +81,7 @@ struct SettingsView: View {
                 if let info = store.exchangeInfo {
                     ExchangeSection(info: info, open: open)
                 }
+                BackupSection()
             }
 
             HStack {

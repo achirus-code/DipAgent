@@ -271,6 +271,24 @@ struct ExchangeInfo: Codable, Equatable {
 
 struct PublicIP: Codable { let ip: String }
 
+/// Response of restoring a backup on the agent.
+struct RestoreResult: Decodable {
+    let bots: Int
+    let trades: Int
+    let liveTradingDisabled: Bool
+    let credentialsRestored: Bool
+    let createdAt: Int64?
+    let agentVersion: String?
+
+    enum CodingKeys: String, CodingKey {
+        case bots, trades
+        case liveTradingDisabled = "live_trading_disabled"
+        case credentialsRestored = "credentials_restored"
+        case createdAt = "created_at"
+        case agentVersion = "agent_version"
+    }
+}
+
 /// Response of switching the live mode; switching back to paper sells all open live positions.
 struct LiveSwitchResult: Decodable {
     struct ClosedPosition: Decodable, Identifiable {

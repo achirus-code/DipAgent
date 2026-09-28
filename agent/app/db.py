@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -77,7 +78,12 @@ def now_ms() -> int:
 
 class Database:
     def __init__(self, path: Path):
-        self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+        self.path = path
+        self._lock = threading.Lock()
+        self._open()
+
+    def _open(self) -> None:
+        self._conn = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         # WAL + NORMAL: no fsync per statement (every tick writes bot states) – still safe against crashes
@@ -85,7 +91,6 @@ class Database:
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(SCHEMA)
         self._migrate()
-        self._lock = threading.Lock()
 
     def _migrate(self) -> None:
         version = int(self._conn.execute("PRAGMA user_version").fetchone()[0])
@@ -95,6 +100,27 @@ class Database:
 
     def close(self) -> None:
         self._conn.close()
+
+    # --- Backup -----------------------------------------------------------
+
+    def snapshot(self) -> bytes:
+        """A consistent copy of the whole database (including what is still in the WAL) as a single file."""
+        with self._lock:
+            copy = sqlite3.connect(":memory:")
+            try:
+                self._conn.backup(copy)
+                return copy.serialize()
+            finally:
+                copy.close()
+
+    def replace_with(self, source: Path) -> None:
+        """Swap in a restored database file (same file system) and reopen; the caller pauses the engine."""
+        with self._lock:
+            self._conn.close()
+            for suffix in ("-wal", "-shm"):
+                Path(str(self.path) + suffix).unlink(missing_ok=True)
+            os.replace(source, self.path)
+            self._open()
 
     def _all(self, sql: str, args: tuple = ()) -> list[dict[str, Any]]:
         with self._lock:

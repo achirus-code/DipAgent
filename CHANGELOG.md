@@ -2,6 +2,28 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **Backup export and import in the app** (*Settings → Backup*). Export saves bots, trades, settings and the
+  Revolut X key as a `.tgz` (`GET /api/backup`, a consistent SQLite snapshot; the API token is not included).
+  Import (`POST /api/restore`) replaces the agent's data with such a file without a restart – e.g. to move from
+  Docker to the Home Assistant add-on. Live trading is switched off after every restore.
+- **Home Assistant add-on** (`homeassistant/dipagent/`). Add this repository in the add-on store, configure the
+  token and exchange in the add-on's *Configuration* tab and point the macOS app at your Home Assistant host. The
+  add-on uses the very same image as Docker users and stores its data in the add-on data directory (part of
+  Home Assistant backups).
+- **Released image on GHCR:** `ghcr.io/achirus-code/dipagent` (amd64 + arm64) is built by the release workflow
+  from a `vX.Y.Z` tag; `docker compose up -d` pulls it instead of building locally. `scripts/sync-addon.py` keeps
+  the add-on version and changelog in sync with the agent (checked in CI).
+
+### Changed
+
+- The container starts as root, takes ownership of `/data` and drops to the unprivileged user (uid 10001) before
+  the agent starts (`app/entrypoint.py`). Needed because Home Assistant mounts the data directory root-owned; a
+  bind mount on plain Docker is now chowned to uid 10001 as well.
+
 ## [1.1.0] – 2026-09-28
 
 Review of the agent with a focus on order execution, stability and load on the exchange API. No changes to

@@ -206,6 +206,19 @@
 "IP address or host name of the agent. Port %@ is used automatically." = "IP-Adresse oder Hostname des Agents. Port %@ wird automatisch verwendet.";
 "Token" = "Token";
 
+/* BackupSection.swift */
+"Backup" = "Backup";
+"Bots, trades, settings and the Revolut X key of the agent as a file – e.g. to move to another agent. The API token is not included." = "Bots, Trades, Einstellungen und der Revolut-X-Schlüssel des Agents als Datei – z. B. für den Umzug auf einen anderen Agent. Das API-Token ist nicht enthalten.";
+"Export …" = "Exportieren …";
+"Import …" = "Importieren …";
+"Importing replaces all bots, trades, settings and the Revolut X key on the agent." = "Der Import ersetzt alle Bots, Trades, Einstellungen und den Revolut-X-Schlüssel auf dem Agent.";
+"Live trading is switched off afterwards – bots continue in paper mode until you enable it again." = "Der Live-Handel ist danach ausgeschaltet – die Bots laufen im Paper-Modus weiter, bis du ihn wieder einschaltest.";
+"Choose file …" = "Datei wählen …";
+"Backup saved as %@" = "Backup gespeichert als %@";
+"Backup restored: %@ bots, %@ trades." = "Backup wiederhergestellt: %@ Bots, %@ Trades.";
+"Revolut X access restored." = "Revolut-X-Zugang wiederhergestellt.";
+"Live trading was switched off." = "Der Live-Handel wurde ausgeschaltet.";
+
 /* TradesView.swift */
 "No trades yet" = "Noch keine Trades";
 "As soon as a bot buys or sells, it shows up here." = "Sobald ein Bot kauft oder verkauft, erscheint es hier.";

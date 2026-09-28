@@ -12,6 +12,7 @@ import json
 import logging
 import uuid
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from datetime import datetime
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
@@ -170,6 +171,18 @@ class Engine:
         task = asyncio.create_task(close_old())
         self._background.add(task)
         task.add_done_callback(self._background.discard)
+
+    @asynccontextmanager
+    async def paused(self):
+        """No tick runs while the body executes (used to swap the database during a restore)."""
+        async with self._tick_lock:
+            yield
+
+    def reset_caches(self) -> None:
+        """Forget everything derived from the old database (after a restore)."""
+        self._last_check.clear()
+        self._candles.clear()
+        self.exchange_error = None
 
     async def shutdown(self) -> None:
         for task in list(self._background):

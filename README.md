@@ -73,20 +73,34 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 
 ### 1. Run the agent (Docker)
 
-Requirements: Docker with Docker Compose v2 on an always-on machine (x86-64 or arm64).
+Requirements: Docker with Docker Compose v2 on an always-on machine (x86-64 or arm64). Running Home Assistant OS?
+Use the [add-on](#home-assistant-add-on) instead.
 
 ```bash
 git clone https://github.com/achirus-code/DipAgent.git
 cd DipAgent/agent
 cp .env.example .env
 sed -i.bak "s/^API_TOKEN=.*/API_TOKEN=$(openssl rand -hex 24)/" .env && rm .env.bak
-docker compose up -d --build
+docker compose up -d                         # pulls ghcr.io/achirus-code/dipagent (or: up -d --build to build locally)
 docker compose logs -f                       # "Engine started …"
 ```
 
 The agent now listens on port **3470**. The token in `.env` is what the app uses to log in. If you leave `API_TOKEN`
 empty, the agent generates one on first start and prints it to the log (it's also stored in the data volume:
 `docker compose exec dipagent cat /data/api_token`).
+
+#### Home Assistant add-on
+
+The agent is also available as a Home Assistant add-on – the same image, configured from the add-on's
+**Configuration** tab instead of `.env`:
+
+1. **Settings → Add-ons → Add-on store → ⋮ → Repositories**, add `https://github.com/achirus-code/DipAgent`.
+2. Install **DipAgent**, optionally set an API token under *Configuration* (empty = generated and printed to the
+   add-on log), then **Start**.
+3. In the app, use the Home Assistant host as the agent address. All data is stored in the add-on's data directory
+   and is part of Home Assistant backups.
+
+Details: [homeassistant/dipagent/DOCS.md](homeassistant/dipagent/DOCS.md).
 
 ### 2. Install the app
 
@@ -145,7 +159,7 @@ with realistic ups and downs.
 
 ```bash
 docker compose logs -f                                # follow the log
-git pull && docker compose up -d --build              # update
+docker compose pull && docker compose up -d           # update (or: git pull && … --build)
 docker compose down                                   # stop (data stays in the volume)
 docker run --rm -v dipagent_dipagent-data:/data -v "$PWD":/backup alpine \
   tar czf /backup/dipagent-backup.tgz -C /data .      # backup of bots, trades, settings and key
@@ -153,10 +167,16 @@ docker run --rm -v dipagent_dipagent-data:/data -v "$PWD":/backup alpine \
 
 - **Data** lives in the Docker volume `dipagent_dipagent-data` (SQLite database, API token, Revolut X key with file
   mode 600).
+- **Backup from the app:** *Settings → Backup → Export* saves bots, trades, settings and the Revolut X key as a
+  `.tgz`; *Import* restores such a file on any agent (e.g. when moving from Docker to the Home Assistant add-on).
+  Importing replaces the agent's data and switches live trading off until you enable it again.
 - **Network:** the app talks plain HTTP with a bearer token. Keep port 3470 inside your home network or reach it via a
   VPN such as Tailscale/WireGuard – don't expose it to the internet. Revolut X API keys can additionally be restricted
   to the agent's public IP.
 - **One instance only:** the engine takes a lock in `/data`; a second container on the same volume refuses to trade.
+- **User:** the container starts as root only to take ownership of `/data` (a bind mount is chowned to uid 10001)
+  and drops to the unprivileged user `dipagent` (uid 10001) before the agent starts. `docker run --user 10001` on a
+  volume that already belongs to that user works too.
 
 ## Development
 
@@ -185,6 +205,7 @@ agent/                    Python 3.12 · FastAPI · SQLite
   app/strategies/         dip buyer, rebound + trailing stop, price zones, savings plan
   app/revolutx.py         Revolut X client (Ed25519 request signing)
   app/credentials.py      key pair generation / storage for the in-app Revolut X setup
+  app/backup.py           backup archive (database snapshot + key) for export/import from the app
   app/i18n.py             English/German texts of the agent
   tests/
 macos/                    SwiftUI menu bar app (Swift package, no Xcode project needed)
@@ -192,7 +213,17 @@ macos/                    SwiftUI menu bar app (Swift package, no Xcode project 
   Resources/*.lproj/      localizations (English = source strings, German translations)
   scripts/                translation check
   build-app.sh            builds and signs DipAgent.app
+homeassistant/dipagent/   Home Assistant add-on (config.yaml, docs, translations) – uses the released agent image
+scripts/sync-addon.py     copies the agent version and CHANGELOG.md into the add-on (checked in CI)
 ```
+
+### Releasing
+
+The Docker image and the Home Assistant add-on come from **one build**: bump `VERSION` in `agent/app/main.py`, add
+the `## [x.y.z]` section to `CHANGELOG.md`, run `python3 scripts/sync-addon.py` (writes the version into
+`homeassistant/dipagent/config.yaml` and copies the changelog), commit, then push a tag `vx.y.z`. The release
+workflow builds `ghcr.io/achirus-code/dipagent` for amd64 and arm64 and pushes the `x.y.z` and `latest` tags – Docker
+users `docker compose pull`, Home Assistant offers the update in the add-on store.
 
 ### Adding a strategy
 
@@ -221,6 +252,7 @@ All routes except `/api/health` require `Authorization: Bearer <API_TOKEN>`; tex
 | `GET /api/strategies` · `GET /api/pairs` · `GET /api/balances` | strategy schemas, trading pairs, balances |
 | `GET/PUT /api/limits` · `PUT /api/live-trading` | risk limits, trading mode |
 | `GET /api/exchange` · `POST /api/exchange/keypair` · `PUT/DELETE /api/exchange/credentials` · `GET /api/exchange/public-ip` | Revolut X setup |
+| `GET /api/backup` · `POST /api/restore` | backup as `.tgz` (database snapshot + Revolut X key), restore from it |
 
 ## License
 

@@ -44,6 +44,10 @@ class CredentialStore:
         self.pending_file = settings.data_dir / "revx_private.pending.pem"
         self.api_key_file = settings.data_dir / "revx_api_key"
 
+    def files(self) -> dict[str, Path]:
+        """The files that make up the app-managed credentials (backup/restore)."""
+        return {"revx_api_key": self.api_key_file, "revx_private.pem": self.private_file}
+
     # --- where do the active credentials come from? --------------------------
 
     @property

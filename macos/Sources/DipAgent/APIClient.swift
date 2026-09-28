@@ -60,6 +60,24 @@ struct APIClient {
         _ = try await raw("DELETE", path, query: query, body: nil)
     }
 
+    /// Downloads a file (e.g. a backup); returns the bytes and the file name the agent suggests.
+    func download(_ path: String) async throws -> (Data, String?) {
+        let (data, response) = try await perform("GET", path, query: [:], body: nil, contentType: nil)
+        let disposition = response?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
+        let name = disposition.split(separator: ";")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { $0.hasPrefix("filename=") }?
+            .dropFirst("filename=".count)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        return (data, name.flatMap { $0.isEmpty ? nil : $0 })
+    }
+
+    /// Uploads a file as the request body (e.g. a backup to restore).
+    func upload<T: Decodable>(_ path: String, data: Data, contentType: String) async throws -> T {
+        let (response, _) = try await perform("POST", path, query: [:], body: data, contentType: contentType)
+        return try JSONDecoder().decode(T.self, from: response)
+    }
+
     private func request<T: Decodable, B: Encodable>(
         _ method: String, _ path: String, query: [String: String] = [:], body: B?
     ) async throws -> T {
@@ -68,6 +86,12 @@ struct APIClient {
     }
 
     private func raw(_ method: String, _ path: String, query: [String: String], body: Data?) async throws -> Data {
+        try await perform(method, path, query: query, body: body, contentType: "application/json").0
+    }
+
+    private func perform(
+        _ method: String, _ path: String, query: [String: String], body: Data?, contentType: String?
+    ) async throws -> (Data, HTTPURLResponse?) {
         guard var components = URLComponents(url: baseURL.appendingPathComponent("api" + path), resolvingAgainstBaseURL: false)
         else { throw APIError.invalidURL }
         if !query.isEmpty {
@@ -81,13 +105,14 @@ struct APIClient {
         req.setValue(AppLanguage.current, forHTTPHeaderField: "Accept-Language") // agent answers in the app's language
         if let body {
             req.httpBody = body
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue(contentType ?? "application/octet-stream", forHTTPHeaderField: "Content-Type")
         }
         let (data, response) = try await Self.session.data(for: req)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let http = response as? HTTPURLResponse
+        let code = http?.statusCode ?? 0
         if code == 401 { throw APIError.unauthorized }
         guard (200..<300).contains(code) else { throw APIError.http(code, Self.detail(from: data)) }
-        return data
+        return (data, http)
     }
 
     /// FastAPI errors look like {"detail": "..."} or {"detail": [{"msg": "..."}]}.

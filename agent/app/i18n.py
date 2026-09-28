@@ -326,6 +326,7 @@ CATALOG: dict[str, L] = {
     ),
     "api.connect_revx_first": L("Please connect Revolut X first", "Bitte zuerst Revolut X verbinden"),
     "api.confirm_live": L("Live trading must be confirmed explicitly", "Live-Handel muss ausdrücklich bestätigt werden"),
+    "api.invalid_backup": L("Not a valid DipAgent backup: {error}", "Kein gültiges DipAgent-Backup: {error}"),
     "api.revx_unreachable_live": L(
         "Revolut X is not reachable – live trading stays off: {error}",
         "Revolut X nicht erreichbar – Live-Handel bleibt aus: {error}",
@@ -360,4 +361,9 @@ CATALOG: dict[str, L] = {
     "event.live_on": L("Live trading ENABLED – real orders on Revolut X", "Live-Handel AKTIVIERT – echte Orders auf Revolut X"),
     "event.live_off": L("Live trading disabled – paper trading only", "Live-Handel deaktiviert – nur noch Paper-Trading"),
     "event.bot_live": L("Switched to live (live trading enabled)", "Live geschaltet (Live-Handel aktiviert)"),
+    "event.restored": L("Backup from {date} restored ({bots} bots, {trades} trades)", "Backup vom {date} wiederhergestellt ({bots} Bots, {trades} Trades)"),
+    "event.live_off_restored": L(
+        "Live trading disabled after the restore – switch it on again in the app if needed",
+        "Live-Handel nach der Wiederherstellung deaktiviert – bei Bedarf in der App wieder einschalten",
+    ),
 }

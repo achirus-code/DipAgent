@@ -10,15 +10,17 @@ import logging
 import re
 import secrets
 import time
+from datetime import datetime
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from . import backup
 from .config import load_settings
 from .credentials import CredentialStore
 from .db import Database
@@ -484,6 +486,60 @@ async def events(
     for r in rows:
         r["message"] = render(r["message"], lang)
     return rows
+
+
+# --- backup ----------------------------------------------------------------------------------
+
+
+@api.get("/backup")
+async def export_backup() -> Response:
+    """Bots, trades, settings and the app-managed Revolut X key as a .tgz (the API token is not included)."""
+    creds = {name: path.read_bytes() for name, path in credentials.files().items() if path.is_file()}
+    data, filename = backup.create(db.snapshot(), creds, {"agent_version": VERSION, "exchange": settings.exchange})
+    return Response(
+        data, media_type="application/gzip", headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@api.post("/restore")
+async def restore_backup(request: Request, lang: str = Depends(get_lang)) -> dict[str, Any]:
+    """Replace the agent's data with an uploaded backup. Live trading is switched off afterwards, always."""
+    body = await request.body()
+    try:
+        unpacked = backup.unpack(body, settings.data_dir)
+    except backup.InvalidBackup as exc:
+        raise fail(400, lang, "api.invalid_backup", error=str(exc)) from exc
+    try:
+        async with engine.paused():  # no tick touches the database while it is swapped
+            live_was_on = engine.live_trading_enabled()
+            db.replace_with(unpacked.db_path)
+            if unpacked.credentials:
+                credentials.save(unpacked.credentials["revx_api_key"].decode().strip(), unpacked.credentials["revx_private.pem"])
+            # off in any case: the restored data may have been backed up with live trading on, and the agent
+            # it lands on may have been live before – the user re-enables it consciously (double confirmation)
+            live_was_on = live_was_on or engine.live_trading_enabled()
+            if live_was_on:
+                db.set_setting("live_trading", False)
+            engine.reset_caches()
+            swap_exchange(build_exchange())
+            bots, trade_count = db.list_bots(), len(db.list_trades(limit=1000))
+            created = unpacked.manifest.get("created_at")
+            date = datetime.fromtimestamp(created / 1000).strftime("%Y-%m-%d %H:%M") if created else "?"
+            db.add_event(None, "info", m("event.restored", date=date, bots=len(bots), trades=trade_count))
+            if live_was_on:
+                db.add_event(None, "info", m("event.live_off_restored"))
+            engine.wake()
+    finally:
+        unpacked.cleanup()
+    log.warning("Backup restored (%d bots, %d trades); live trading is off", len(bots), trade_count)
+    return {
+        "bots": len(bots),
+        "trades": trade_count,
+        "live_trading_disabled": live_was_on,
+        "credentials_restored": bool(unpacked.credentials),
+        "created_at": created,
+        "agent_version": unpacked.manifest.get("agent_version"),
+    }
 
 
 app.include_router(api)
