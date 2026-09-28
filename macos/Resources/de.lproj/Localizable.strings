@@ -242,3 +242,10 @@
 "Newest" = "Neueste";
 "Sort by" = "Sortieren nach";
 "Sort bots" = "Bots sortieren";
+"Planned profit ≈ %@ after fees" = "Geplanter Gewinn ≈ %@ nach Gebühren";
+"Sells from ≈ %@ after fees" = "Verkauft ab ≈ %@ nach Gebühren";
+"Planned profit ≈ %@ after fees at %@ invested" = "Geplanter Gewinn ≈ %@ nach Gebühren bei %@ investiert";
+"Trailing starts at ≈ %@ after fees" = "Trailing startet bei ≈ %@ nach Gebühren";
+"Locks in at least ≈ %@ after fees" = "Sichert mindestens ≈ %@ nach Gebühren";
+"Max. loss ≈ %@ incl. fees" = "Max. Verlust ≈ %@ inkl. Gebühren";
+"No stop-loss – the loss is not limited" = "Kein Stop-Loss – der Verlust ist nicht begrenzt";

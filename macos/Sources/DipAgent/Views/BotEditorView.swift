@@ -181,12 +181,61 @@ struct BotEditorView: View {
                                     get: { values[param.key] ?? param.default },
                                     set: { values[param.key] = $0 }
                                 ),
-                                currency: quote
+                                currency: quote,
+                                note: plannedResult(for: param.key)
                             )
                         }
                     }
                 }
             }
+        }
+    }
+
+    /// What a profit rule means in money for the entered amount, net of buy + sell fees – shown under the field.
+    private func plannedResult(for key: String) -> (text: String, color: Color)? {
+        let feeRate = store.status?.takerFee ?? TradeCostCheck.defaultFeeRate
+        func num(_ key: String) -> Double? { values[key]?.double ?? strategy?.params.first { $0.key == key }?.default.double }
+        guard let amount = num("amount"), amount > 0 else { return nil }
+        func net(_ pct: Double, on base: Double = amount) -> Double {
+            base * pct / 100 - TradeCostCheck.roundTripFee(amount: base, quote: quote, feeRate: feeRate)
+        }
+        func profit(_ value: Double, _ template: (String) -> String) -> (String, Color) {
+            (template(Fmt.money(value, quote, signed: true)), value > 0 ? .green : .orange)
+        }
+        switch (strategyKey, key) {
+        case ("dip", "take_profit"):
+            guard let pct = num(key), pct > 0 else { return nil }
+            return profit(net(pct)) { String(localized: "Planned profit ≈ \($0) after fees") }
+        case ("dip", "min_profit"):
+            guard let pct = num(key) else { return nil }
+            return profit(net(pct)) { String(localized: "Sells from ≈ \($0) after fees") }
+        case ("dca", "take_profit"):
+            guard let pct = num(key), pct > 0 else { return nil }
+            // the plan accumulates: the target applies to the whole position
+            let maxInvest = num("max_invest") ?? 0, maxBuys = num("max_buys") ?? 0
+            let position = maxInvest > 0 ? maxInvest : (maxBuys > 0 ? amount * maxBuys : amount)
+            return profit(net(pct, on: position)) { String(localized: "Planned profit ≈ \($0) after fees at \(Fmt.money(position, quote)) invested") }
+        case ("trailing", "activation"):
+            guard let pct = num(key) else { return nil }
+            return profit(net(pct)) { String(localized: "Trailing starts at ≈ \($0) after fees") }
+        case ("trailing", "trail"):
+            guard let trail = num(key), let activation = num("activation") else { return nil }
+            return profit(net(max(activation - trail, 0))) { String(localized: "Locks in at least ≈ \($0) after fees") }
+        case ("zones", "sell_above"):
+            guard let sell = num(key), let buy = num("buy_below"), buy > 0, sell > 0 else { return nil }
+            return profit(net((sell / buy - 1) * 100)) { String(localized: "Planned profit ≈ \($0) after fees") }
+        case (_, "stop_loss"):
+            guard let pct = num(key), pct > 0 else { return (String(localized: "No stop-loss – the loss is not limited"), .red) }
+            let loss = -(amount * pct / 100) - TradeCostCheck.roundTripFee(amount: amount, quote: quote, feeRate: feeRate)
+            return (String(localized: "Max. loss ≈ \(Fmt.money(loss, quote, signed: true)) incl. fees"), .red)
+        case ("zones", "stop_price"):
+            guard let stop = num(key), stop > 0, let buy = num("buy_below"), buy > 0 else {
+                return (String(localized: "No stop-loss – the loss is not limited"), .red)
+            }
+            let loss = -amount * max(1 - stop / buy, 0) - TradeCostCheck.roundTripFee(amount: amount, quote: quote, feeRate: feeRate)
+            return (String(localized: "Max. loss ≈ \(Fmt.money(loss, quote, signed: true)) incl. fees"), .red)
+        default:
+            return nil
         }
     }
 
@@ -346,6 +395,8 @@ struct ParamField: View {
     let param: StrategyParam
     @Binding var value: JSONValue
     let currency: String
+    /// Small line under the help text, e.g. the profit this setting aims for in money.
+    var note: (text: String, color: Color)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -359,6 +410,13 @@ struct ParamField: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if let note {
+                Text(note.text)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(note.color)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
             }
         }
     }
@@ -488,6 +546,11 @@ struct TradeCostCheck {
             }
         }
         suggestedAmount = suggestion
+    }
+
+    /// Buy + sell fee for one round trip of `amount`.
+    static func roundTripFee(amount: Double, quote: String, feeRate: Double) -> Double {
+        cost(amount: amount, quote: quote, feeRate: feeRate).fee
     }
 
     /// Buy fee is charged in the coin (exact), the sell fee in the quote currency – rounded up to a cent for fiat.

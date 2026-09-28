@@ -221,7 +221,7 @@ struct SummaryCard: View {
                 Text("Total result").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 Spacer()
                 if liveAllowed {
-                    Badge(text: "LIVE", color: .red, icon: "bolt.fill")
+                    Badge(text: "LIVE", color: .green, icon: "bolt.fill")
                         .help("Live trading is active – bots trade with real money")
                 } else {
                     Badge(text: "PAPER MODE", color: .orange, icon: "testtube.2")
