@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+import json
 import logging
 import uuid
 from collections import defaultdict
@@ -15,20 +16,28 @@ from datetime import datetime
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
+import httpx
+
 from .config import Settings
 from .db import Database, now_ms
-from .exchange import Exchange, OrderResult, PairInfo
-from .i18n import Problem, as_message, m, message_key, money, qty, render
+from .exchange import Candle, Exchange, OrderResult, PairInfo, Ticker
+from .i18n import Problem, as_message, dump, m, message_key, money, qty, render
 from .revolutx import RevolutXError
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell
 
 log = logging.getLogger("dipagent.engine")
 
-ORDER_POLL_ATTEMPTS = 10
-ORDER_POLL_DELAY = 0.8
+# market orders usually fill within a second – poll quickly first, then back off (≈ 8 s in total)
+ORDER_POLL_DELAYS = (0.3, 0.5, 0.7, 1.0, 1.0, 1.5, 1.5, 1.5)
 ERROR_BACKOFF_MS = 5 * 60_000
-# an order whose placement response got lost and that can't be found at the exchange after this long is discarded
+# network hiccups and exchange-side errors clear up quickly – don't sit out a dip for 5 minutes because of one
+TRANSIENT_BACKOFF_MS = 60_000
+# an order whose placement response got lost and that can't be found at the exchange after this long stops the bot
 ORDER_LOOKUP_GRACE_MS = 3 * 60_000
+# how many symbols are fetched from the exchange concurrently during a tick
+MARKET_DATA_CONCURRENCY = 4
+# candles are re-fetched when a new candle starts or after this long, not on every tick
+CANDLE_CACHE_MS = 5 * 60_000
 
 Message = dict | str
 
@@ -50,8 +59,47 @@ def bot_has_live_position(bot: dict[str, Any] | None) -> bool:
 
 
 def definitely_not_placed(exc: Exception) -> bool:
-    """True if the exchange clearly refused the order (vs. timeouts/5xx where it may have gone through)."""
-    return isinstance(exc, (ValueError, Problem)) or (isinstance(exc, RevolutXError) and exc.status < 500)
+    """True only if the exchange clearly refused the order.
+
+    Everything else (timeouts, 5xx, an unreadable response – note that a JSON decoding error is a ``ValueError``)
+    means the order *may* have gone through and must be looked up instead of being sent again.
+    """
+    return isinstance(exc, Problem) or (isinstance(exc, RevolutXError) and not exc.transient)
+
+
+def is_transient(exc: Exception) -> bool:
+    """Network or exchange-side trouble that usually clears up by itself."""
+    return isinstance(exc, (httpx.HTTPError, ConnectionError, TimeoutError)) or (
+        isinstance(exc, RevolutXError) and exc.transient
+    )
+
+
+def backoff_for(exc: Exception) -> int:
+    return TRANSIENT_BACKOFF_MS if is_transient(exc) else ERROR_BACKOFF_MS
+
+
+class CandleCache:
+    """Candles per (symbol, interval, window), shared by all bots and kept across ticks.
+
+    The set of candles only changes when a new candle starts; in between only the forming candle moves, which is
+    covered by the live ticker price the strategies use anyway. Re-fetched at the latest after ``CANDLE_CACHE_MS``.
+    """
+
+    def __init__(self) -> None:
+        self._entries: dict[tuple[str, int, int], tuple[int, int, list[Candle]]] = {}
+
+    def clear(self) -> None:
+        self._entries.clear()
+
+    async def fetch(self, exchange: Exchange, symbol: str, interval: int, since: int, until: int) -> list[Candle]:
+        key = (symbol, interval, until - since)
+        bucket = until // (interval * 60_000)
+        entry = self._entries.get(key)
+        if entry and entry[0] == bucket and now_ms() - entry[1] < CANDLE_CACHE_MS:
+            return entry[2]
+        candles = await exchange.candles(symbol, interval, since, until)
+        self._entries[key] = (bucket, now_ms(), candles)
+        return candles
 
 
 class Engine:
@@ -67,7 +115,13 @@ class Engine:
         self._locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         # serialises "check limits + place buy" across all bots so limits can't be overrun concurrently
         self._buy_lock = asyncio.Lock()
+        # held while a tick runs – lets an exchange swap wait until in-flight requests are done
+        self._tick_lock = asyncio.Lock()
         self._instance_lock_file = None
+        self._candles = CandleCache()
+        # last evaluation per bot; only persisted together with a state/status change (saves a write per tick)
+        self._last_check: dict[int, int] = {}
+        self._background: set[asyncio.Task] = set()
 
     # --- loop -------------------------------------------------------------
 
@@ -88,7 +142,8 @@ class Engine:
         log.info("Engine started (exchange: %s, interval: %ss)", self.exchange.name, self.settings.tick_seconds)
         while True:
             try:
-                await self.tick()
+                async with self._tick_lock:
+                    await self.tick()
             except Exception:  # noqa: BLE001 - the loop must never die
                 log.exception("Tick failed")
             try:
@@ -100,6 +155,27 @@ class Engine:
     def wake(self) -> None:
         self._wake.set()
 
+    def replace_exchange(self, new: Exchange) -> None:
+        """Switch to new credentials without a restart. The old client is closed once the running tick is done."""
+        old = self.exchange
+        self.exchange = new
+        self.exchange_error = None
+        self._candles.clear()
+        self.wake()
+
+        async def close_old() -> None:
+            async with self._tick_lock:
+                await old.close()
+
+        task = asyncio.create_task(close_old())
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def shutdown(self) -> None:
+        for task in list(self._background):
+            task.cancel()
+        await self.exchange.close()
+
     def live_trading_enabled(self) -> bool:
         """Global switch, off by default; only the app can turn it on (with double confirmation)."""
         return bool(self.db.get_setting("live_trading", False))
@@ -108,9 +184,13 @@ class Engine:
         """Mode for *new* buys. Open positions keep the mode they were bought with."""
         return bot["paper"] or not self.live_trading_enabled()
 
-    async def market_view(self, symbol: str) -> MarketView:
-        ticker = await self.exchange.ticker(symbol)
-        view = MarketView(self.exchange, symbol, ticker, self.exchange.now_ms())
+    async def _fetch_candles(self, symbol: str, interval: int, since: int, until: int) -> list[Candle]:
+        return await self._candles.fetch(self.exchange, symbol, interval, since, until)
+
+    async def market_view(self, symbol: str, ticker: Ticker | None = None) -> MarketView:
+        if ticker is None:
+            ticker = await self.exchange.ticker(symbol)
+        view = MarketView(self.exchange, symbol, ticker, self.exchange.now_ms(), fetch=self._fetch_candles)
         self.snapshots[symbol] = {
             "price": float(view.price),
             "bid": float(view.bid),
@@ -120,16 +200,35 @@ class Engine:
         }
         return view
 
-    async def tick(self) -> None:
-        bots = self.db.list_bots()
+    async def _market_views(self, symbols: list[str]) -> tuple[dict[str, MarketView], dict[str, Message]]:
+        """Ticker for all symbols in one request (where supported), candles concurrently."""
         views: dict[str, MarketView] = {}
         errors: dict[str, Message] = {}
-        for symbol in sorted({b["symbol"] for b in bots}):
-            try:
-                views[symbol] = await self.market_view(symbol)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("Market data for %s failed: %s", symbol, exc)
-                errors[symbol] = as_message(exc)
+        if not symbols:
+            return views, errors
+        try:
+            tickers = await self.exchange.tickers(symbols)
+        except Exception as exc:  # noqa: BLE001 – fall back to one request per symbol below
+            log.warning("Ticker batch failed: %s", exc)
+            tickers = {}
+        semaphore = asyncio.Semaphore(MARKET_DATA_CONCURRENCY)
+
+        async def build(symbol: str) -> None:
+            async with semaphore:
+                try:
+                    views[symbol] = await self.market_view(symbol, tickers.get(symbol))
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("Market data for %s failed: %s", symbol, exc)
+                    errors[symbol] = as_message(exc)
+
+        await asyncio.gather(*(build(symbol) for symbol in symbols))
+        return views, errors
+
+    async def tick(self) -> None:
+        bots = self.db.list_bots()
+        # stopped bots still need a price while they hold a position (unrealised P&L) or an order is in flight
+        relevant = [b for b in bots if b["enabled"] or b["state"].get("position") or b["state"].get("pending_order")]
+        views, errors = await self._market_views(sorted({b["symbol"] for b in relevant}))
         self.exchange_error = next(iter(errors.values()), None)
         self.last_tick = now_ms()
 
@@ -139,24 +238,41 @@ class Engine:
             view = views.get(bot["symbol"])
             if view is None:
                 status = m("engine.no_market_data", error=errors.get(bot["symbol"], "?"))
-                self.db.update_bot(bot["id"], status=status, last_check=now_ms())
+                async with self._locks[bot["id"]]:
+                    if current := self.db.get_bot(bot["id"]):  # re-read: the API may have changed it meanwhile
+                        self._persist(current, current["state"], status, self._snapshot(current))
                 continue
             await self.process(bot["id"], view)
 
     # --- per bot ------------------------------------------------------------
+
+    @staticmethod
+    def _snapshot(bot: dict[str, Any]) -> tuple[str, Any]:
+        """What is in the database right now – ``_persist`` only writes when state/status differ from it."""
+        return json.dumps(bot["state"]), dump(bot["status"])
+
+    def _persist(self, bot: dict[str, Any], state: dict[str, Any], status: Message, before: tuple[str, Any]) -> None:
+        """Write state/status back – only when something changed (the check time alone is kept in memory)."""
+        self._last_check[bot["id"]] = now_ms()
+        if (json.dumps(state), dump(status)) == before:
+            return
+        self.db.update_bot(bot["id"], state=state, status=status, last_check=self._last_check[bot["id"]])
 
     async def process(self, bot_id: int, view: MarketView) -> None:
         async with self._locks[bot_id]:
             bot = self.db.get_bot(bot_id)
             if not bot or not bot["enabled"]:
                 return
+            before = self._snapshot(bot)
             state = bot["state"]
             status: Message = bot["status"]
             try:
                 if state.get("pending_order"):
-                    await self._reconcile(bot, state)
+                    status = await self._reconcile(bot, state) or status
                     if state.get("pending_order"):
                         status = m("engine.waiting_for_order")
+                        return
+                    if not bot["enabled"]:  # stopped by the reconciliation – needs a human look
                         return
                 if int(state.get("retry_after") or 0) > now_ms():
                     return
@@ -166,9 +282,9 @@ class Engine:
                 log.warning("Bot %s: %s", bot["name"], exc)
                 self.db.add_event(bot_id, "error", as_message(exc))
                 status = m("engine.error", error=as_message(exc))
-                state["retry_after"] = now_ms() + ERROR_BACKOFF_MS
+                state["retry_after"] = now_ms() + backoff_for(exc)
             finally:
-                self.db.update_bot(bot_id, state=state, status=status, last_check=now_ms())
+                self._persist(bot, state, status, before)
 
     async def _evaluate(self, bot: dict[str, Any], state: dict[str, Any], view: MarketView) -> Message:
         strategy = STRATEGIES.get(bot["strategy"])
@@ -196,13 +312,23 @@ class Engine:
         view = await self.market_view(bot["symbol"])
         async with self._locks[bot_id]:
             bot = self.db.get_bot(bot_id)
+            if not bot:
+                raise KeyError(bot_id)
             state = bot["state"]
             if not state.get("position"):
                 raise Problem("err.no_position")
             if state.get("pending_order"):
                 raise Problem("err.order_running")
-            status = await self._sell(bot, state, view, reason or m("engine.manual_close"))
-            self.db.update_bot(bot_id, state=state, status=status, last_check=now_ms())
+            before = self._snapshot(bot)
+            status: Message = bot["status"]
+            try:
+                status = await self._sell(bot, state, view, reason or m("engine.manual_close"))
+            except Exception as exc:
+                status = m("engine.error", error=as_message(exc))
+                raise
+            finally:
+                # always write the state back: a rejected order must not leave a pending order behind
+                self._persist(bot, state, status, before)
             return status
 
     async def close_live_positions(self, reason: Message) -> list[dict[str, Any]]:
@@ -263,7 +389,16 @@ class Engine:
             return m("engine.position_open_no_buy")
         open_position = Position.from_state(state.get("position"))
         if open_position and open_position.paper != self.is_paper(bot):
-            return m("engine.mode_changed_paper" if open_position.paper else "engine.mode_changed_live")
+            if not (open_position.paper and strategy.accumulates):
+                return m("engine.mode_changed_paper" if open_position.paper else "engine.mode_changed_live")
+            # a savings plan would otherwise never buy again (and without a profit target never sell): close the
+            # simulated position the simulated way and carry on live – real coins are never "sold" on paper
+            pair = await self.exchange.pair(bot["symbol"])
+            price = view.bid
+            gross = open_position.qty * price
+            fee = gross * self.settings.taker_fee
+            self._record_sell(bot, state, pair, open_position.qty, gross - fee, price, fee, None, True,
+                              m("engine.mode_changed_close"))
         pair = await self.exchange.pair(bot["symbol"])
         quote_size = round_down(amount, pair.quote_step)
         if quote_size < pair.min_order_size_quote:
@@ -289,7 +424,9 @@ class Engine:
             if available < quote_size:
                 raise Problem("err.insufficient", currency=pair.quote, available=money(available, pair.quote),
                               needed=money(quote_size, pair.quote))
-            return await self._place_order(bot, state, pair, "buy", reason, quote_size=quote_size)
+            pending = await self._submit_order(bot, state, "buy", reason, quote_size=quote_size)
+        # the pending order already counts towards the limits – don't hold up other bots while it fills
+        return await self._track_order(bot, state, pair, pending)
 
     async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message) -> Message:
         position = Position.from_state(state.get("position"))
@@ -310,12 +447,13 @@ class Engine:
         if amount <= 0 or amount < pair.min_order_size:
             raise Problem("err.sell_below_min", qty=qty(amount), base=pair.base,
                           min=qty(pair.min_order_size), available=qty(available))
-        return await self._place_order(bot, state, pair, "sell", reason, base_size=amount)
+        pending = await self._submit_order(bot, state, "sell", reason, base_size=amount)
+        return await self._track_order(bot, state, pair, pending)
 
-    async def _place_order(
-        self, bot: dict, state: dict, pair: PairInfo, side: str, reason: Message,
+    async def _submit_order(
+        self, bot: dict, state: dict, side: str, reason: Message,
         *, base_size: Decimal | None = None, quote_size: Decimal | None = None,
-    ) -> Message:
+    ) -> dict:
         """Place a market order exactly once.
 
         The pending order (with our own client_order_id) is persisted *before* it is sent. If the response
@@ -343,36 +481,57 @@ class Engine:
             raise Problem("err.order_unclear", error=as_message(exc)) from exc
         self.db.update_bot(bot["id"], state=state)
         self.db.add_event(bot["id"], "info", m("engine.order_sent", id=pending["id"], side=m(f"side.{side}")))
-        return await self._track_order(bot, state, pair, pending)
+        return pending
 
     async def _track_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict) -> Message:
-        for _ in range(ORDER_POLL_ATTEMPTS):
-            await asyncio.sleep(ORDER_POLL_DELAY)
+        for delay in ORDER_POLL_DELAYS:
+            await asyncio.sleep(delay)
             result = await self.exchange.get_order(pending["id"])
             if result.terminal:
                 return self._apply_order(bot, state, pair, pending, result)
         return m("engine.waiting_for_order")
 
-    async def _reconcile(self, bot: dict, state: dict) -> None:
+    async def _reconcile(self, bot: dict, state: dict) -> Message | None:
+        """Finish a pending order. Returns the new status once the order is settled, else None."""
         pending = state["pending_order"]
         pair = await self.exchange.pair(bot["symbol"])
+        overdue = now_ms() - pending["placed_at"] > ORDER_LOOKUP_GRACE_MS
         if not pending.get("id"):
             found = await self.exchange.find_order(bot["symbol"], pending["client_order_id"], pending["placed_at"] - 60_000)
             if found is None:
-                if now_ms() - pending["placed_at"] > ORDER_LOOKUP_GRACE_MS:
-                    state.pop("pending_order", None)
-                    self.db.add_event(bot["id"], "info", m("engine.order_not_found"))
-                return
+                return self._abandon_order(bot, state, pending) if overdue else None
             pending["id"] = found.order_id
             self.db.update_bot(bot["id"], state=state)
             result = found
         else:
-            result = await self.exchange.get_order(pending["id"])
+            try:
+                result = await self.exchange.get_order(pending["id"])
+            except RevolutXError as exc:
+                if exc.status == 404 and overdue:  # the exchange doesn't know the id (any more)
+                    return self._abandon_order(bot, state, pending)
+                raise
         if result.terminal:
-            self._apply_order(bot, state, pair, pending, result)
+            return self._apply_order(bot, state, pair, pending, result)
+        return None
+
+    def _abandon_order(self, bot: dict, state: dict, pending: dict) -> Message:
+        """An order we can't find for minutes: don't guess. Drop it and stop the bot so nobody buys twice.
+
+        If the order was in fact executed, the coins are on the account unbooked – a human has to check that
+        at the exchange before starting the bot again.
+        """
+        state.pop("pending_order", None)
+        state.pop("retry_after", None)
+        bot["enabled"] = False
+        self.db.update_bot(bot["id"], enabled=False)
+        msg = m("engine.order_not_found", id=pending.get("id") or pending["client_order_id"])
+        self.db.add_event(bot["id"], "error", msg)
+        log.error("Bot %s: %s", bot["name"], render(msg, "en"))
+        return msg
 
     def _apply_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict, r: OrderResult) -> Message:
         state.pop("pending_order", None)
+        state.pop("retry_after", None)  # the "order unclear" error is resolved with the order
         if self.db.trade_exists(r.order_id):  # never book the same exchange order twice
             return m("engine.order_booked")
         if r.filled_qty <= 0:
@@ -473,8 +632,9 @@ class Engine:
             "paper": self.is_paper(bot),
             "paper_requested": bot["paper"],
             "status": render(bot["status"], lang),
-            "status_error": message_key(bot["status"]) == "engine.error" or str(bot["status"]).startswith("Fehler"),
-            "last_check": bot["last_check"],
+            "status_error": message_key(bot["status"]) in {"engine.error", "engine.order_not_found"}
+            or str(bot["status"]).startswith("Fehler"),
+            "last_check": self._last_check.get(bot["id"], bot["last_check"]),
             "created_at": bot["created_at"],
             "pending_order": bool(bot["state"].get("pending_order")),
             "position": pos_json,

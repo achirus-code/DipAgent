@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -43,6 +45,8 @@ class Param:
                 v = value if value in allowed else self.default
             else:
                 v = float(value)
+                if not math.isfinite(v):  # JSON "NaN"/"Infinity" would poison every Decimal comparison
+                    return self.default
         except (TypeError, ValueError):
             return self.default
         if isinstance(v, (int, float)) and not isinstance(v, bool):
@@ -125,14 +129,21 @@ class Decision:
     action: Buy | Sell | None = None
 
 
-class MarketView:
-    """Market data for one symbol during one engine tick (candles fetched lazily and cached)."""
+CandleFetch = Callable[[str, int, int, int], Awaitable[list[Candle]]]  # (symbol, interval, since, until)
 
-    def __init__(self, exchange: Exchange, symbol: str, ticker: Ticker, now: int):
+
+class MarketView:
+    """Market data for one symbol during one engine tick (candles fetched lazily and cached).
+
+    ``fetch`` lets the engine plug in a cache that survives ticks; by default candles come from the exchange.
+    """
+
+    def __init__(self, exchange: Exchange, symbol: str, ticker: Ticker, now: int, fetch: CandleFetch | None = None):
         self.exchange = exchange
         self.symbol = symbol
         self.ticker = ticker
         self.now = now
+        self._fetch = fetch or exchange.candles
         self._cache: dict[tuple[int, float], list[Candle]] = {}
 
     @property
@@ -153,7 +164,7 @@ class MarketView:
         key = (interval, hours)
         if key not in self._cache:
             since = self.now - int(hours * HOUR_MS) - interval * 60_000
-            self._cache[key] = await self.exchange.candles(self.symbol, interval, since, self.now)
+            self._cache[key] = await self._fetch(self.symbol, interval, since, self.now)
         return self._cache[key], interval
 
     async def price_at(self, hours_ago: float) -> Decimal:

@@ -58,6 +58,12 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 """
 
+# Schema changes after the initial release, applied once each (tracked in ``PRAGMA user_version``).
+MIGRATIONS: list[str] = [
+    # 1: the P&L summary filters trades by time – give it an index
+    "CREATE INDEX IF NOT EXISTS trades_created ON trades(created_at);",
+]
+
 DEFAULT_LIMITS: dict[str, Any] = {
     "max_open_positions": 3,        # how many bots may hold a position at the same time (0 = unlimited)
     "max_total_invested": 0.0,      # sum of all open positions in quote currency (0 = unlimited)
@@ -74,8 +80,21 @@ class Database:
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        # WAL + NORMAL: no fsync per statement (every tick writes bot states) – still safe against crashes
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(SCHEMA)
+        self._migrate()
         self._lock = threading.Lock()
+
+    def _migrate(self) -> None:
+        version = int(self._conn.execute("PRAGMA user_version").fetchone()[0])
+        for number, sql in enumerate(MIGRATIONS[version:], start=version + 1):
+            self._conn.executescript(sql)
+            self._conn.execute(f"PRAGMA user_version={number}")
+
+    def close(self) -> None:
+        self._conn.close()
 
     def _all(self, sql: str, args: tuple = ()) -> list[dict[str, Any]]:
         with self._lock:
