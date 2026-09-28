@@ -26,7 +26,7 @@ The app is available in **English and German** (follows the macOS language, can 
 
 ## Features
 
-- **Four strategies**, configurable per bot (see below) – e.g. *“buy ETH-EUR after the price dropped ≥ 1 % in 24 h,
+- **Five strategies**, configurable per bot (see below) – e.g. *“buy ETH-EUR after the price dropped ≥ 1 % in 24 h,
   sell once it has recovered”*.
 - **Paper mode by default.** Live trading is switched on in the app, only after Revolut X is connected and after a
   **double confirmation**. Switching back to paper mode sells all open live positions (with a warning first).
@@ -60,6 +60,7 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 | **Rebound + trailing stop** | when the price is X % below the high of the last N hours | via a trailing stop once the activation profit is reached; optional stop-loss |
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |
+| **AI decides** | when Claude sees an edge – it looks at trend, volatility of the last hours, momentum and optionally the news every N minutes | when Claude decides to take the profit; never at a loss (only the optional stop-loss may). Needs `ANTHROPIC_API_KEY` on the agent; every check costs a few cents |
 
 > **Going live with open paper positions:** bots keep simulating an open paper position until it is sold, then buy
 > live. The savings plan is the exception – it closes its paper position (simulated) with the next instalment and
@@ -149,6 +150,7 @@ All settings are optional environment variables in `agent/.env`:
 | `TZ` | UTC | Time zone, used for "today" in the summary (e.g. `Europe/Berlin`) |
 | `REVX_API_KEY` | – | Alternative to the in-app setup: API key here + private key in `agent/secrets/revx_private.pem` (takes precedence; read-only in the app) |
 | `MOCK_SPEED` | `1` | Only for `EXCHANGE=mock`: time lapse (60 = one market hour per minute) |
+| `ANTHROPIC_API_KEY` | – | Only for the *AI decides* strategy (Claude decides when to buy and sell). Key from console.anthropic.com |
 
 Live trading, limits and bots are managed in the app and stored in the data volume – not in `.env`.
 
@@ -202,7 +204,7 @@ python3 scripts/check_localizations.py
 agent/                    Python 3.12 · FastAPI · SQLite
   app/main.py             REST API (answers in the app's language via Accept-Language)
   app/engine.py           bot engine: evaluation, limits, idempotent order execution, bookkeeping
-  app/strategies/         dip buyer, rebound + trailing stop, price zones, savings plan
+  app/strategies/         dip buyer, rebound + trailing stop, price zones, savings plan, AI decides (Claude)
   app/revolutx.py         Revolut X client (Ed25519 request signing)
   app/credentials.py      key pair generation / storage for the in-app Revolut X setup
   app/backup.py           backup archive (database snapshot + key) for export/import from the app
