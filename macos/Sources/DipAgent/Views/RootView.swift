@@ -163,7 +163,12 @@ struct HeaderView: View {
                 .help("Refresh")
             }
             if showSummary, store.isConnected, let summary = store.summary {
-                SummaryCard(summary: summary, liveAllowed: store.status?.liveTradingAllowed ?? false)
+                SummaryCard(
+                    summary: summary,
+                    liveAllowed: store.status?.liveTradingAllowed ?? false,
+                    balances: store.balances,
+                    isDemo: store.status?.exchange == "mock"
+                )
             }
         }
     }
@@ -200,6 +205,8 @@ struct HeaderView: View {
 struct SummaryCard: View {
     let summary: Summary
     let liveAllowed: Bool
+    var balances: [Balance] = []
+    var isDemo = false
 
     var body: some View {
         let main = summary.currencies.first
@@ -230,6 +237,24 @@ struct SummaryCard: View {
                 }
             }
             Divider().opacity(0.4)
+            if !cash.isEmpty {
+                HStack(alignment: .firstTextBaseline) {
+                    Label(balanceTitle, systemImage: "banknote")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .labelStyle(CompactLabelStyle())
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        ForEach(cash) { balance in
+                            Text(Fmt.money(balance.available, balance.currency))
+                                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(balance.available > 0 ? Color.green : Color.secondary)
+                                .help("Available now · \(Fmt.money(balance.total, balance.currency)) in total")
+                        }
+                    }
+                }
+            }
             HStack(spacing: 12) {
                 Label("\(String(summary.botsActive))/\(String(summary.botsTotal)) bots active", systemImage: "cpu")
                 Label("\(openPositionsText) open", systemImage: "tray.full")
@@ -253,6 +278,17 @@ struct SummaryCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
+    }
+
+    private var balanceTitle: LocalizedStringKey { isDemo ? "Balance (demo)" : "Balance on Revolut X" }
+
+    /// Spendable cash (fiat and the bots' quote currencies) – coins held in positions are not included.
+    private var cash: [Balance] {
+        let quotes = summary.currencies.map(\.currency)
+        let fiat: Set<String> = ["EUR", "USD", "GBP", "CHF", "PLN"]
+        return balances
+            .filter { quotes.contains($0.currency) || fiat.contains($0.currency) }
+            .sorted { (quotes.firstIndex(of: $0.currency) ?? .max, $0.currency) < (quotes.firstIndex(of: $1.currency) ?? .max, $1.currency) }
     }
 
     /// "2/3" when a position limit is set, otherwise "2".

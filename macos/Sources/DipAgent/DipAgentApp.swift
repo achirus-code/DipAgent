@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func togglePanel() {
         guard let panel else { return }
         if panel.isVisible {
-            panel.orderOut(nil)
+            hidePanel()
         } else if Date().timeIntervalSince(lastAutoClose) > 0.3 { // the icon click itself just closed it
             showPanel()
         }
@@ -60,14 +60,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func closeUnlessPinned() {
         guard let panel, panel.isVisible, !store.keepPanelOpen else { return }
-        panel.orderOut(nil)
+        hidePanel()
         lastAutoClose = Date()
     }
 
     /// Opens the panel below the icon, or brings it to the front if it is already open.
     private func showPanel() {
         guard let panel, let button = statusItem?.button, let buttonWindow = button.window else { return }
-        if !panel.isVisible {
+        let opening = !panel.isVisible
+        if opening {
             let iconFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
             let screen = (buttonWindow.screen ?? NSScreen.main)?.visibleFrame ?? .zero
             // The icon must sit in the menu bar (above the visible area); otherwise fall back to the top-right corner
@@ -78,6 +79,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
+        setIconHighlighted(true)
+        // No control starts focused (otherwise AppKit puts the focus ring on the first key view – the refresh button).
+        // SwiftUI may assign its initial focus a runloop later, so clear it again then.
+        if opening {
+            panel.makeFirstResponder(nil)
+            DispatchQueue.main.async { panel.makeFirstResponder(nil) }
+        }
+    }
+
+    private func hidePanel() {
+        panel?.orderOut(nil)
+        setIconHighlighted(false)
+    }
+
+    /// Like a regular menu bar menu: the icon stays selected while the panel is open.
+    private func setIconHighlighted(_ highlighted: Bool) {
+        statusItem?.button?.highlight(highlighted)
+        // the button resets its highlight when the click that opened the panel ends – apply it again afterwards
+        DispatchQueue.main.async { [weak self] in
+            self?.statusItem?.button?.highlight(self?.panel?.isVisible == true)
+        }
     }
 
     /// Keeps the menu bar icon in sync with the connection state.

@@ -27,65 +27,6 @@ struct SettingsView: View {
                 LimitsSection(limits: limits)
             }
 
-            // Bots
-            if store.isConnected {
-                VStack(alignment: .leading, spacing: 6) {
-                    SectionLabel("Manage bots")
-                    Card(padding: 4) {
-                        VStack(spacing: 0) {
-                            ForEach(store.bots) { bot in
-                                Button { open(.editor(bot.id)) } label: {
-                                    HStack(spacing: 10) {
-                                        IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: 24)
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text(bot.name).font(.system(size: 12, weight: .medium))
-                                            Text(verbatim: "\(bot.symbol) · \(bot.strategyName)\(bot.paper ? " · Paper" : "")")
-                                                .font(.system(size: 10)).foregroundStyle(.secondary)
-                                        }
-                                        Spacer()
-                                        Circle().fill(bot.enabled ? Color.green : Color.gray.opacity(0.5)).frame(width: 7, height: 7)
-                                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary)
-                                    }
-                                    .padding(8)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                Divider().opacity(0.4).padding(.leading, 42)
-                            }
-                            Button { open(.editor(nil)) } label: {
-                                Label("Create new bot", systemImage: "plus.circle.fill")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(8)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(Color.accentColor)
-                        }
-                    }
-                }
-
-                if !store.balances.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        SectionLabel(store.status?.exchange == "mock" ? "Balance (demo)" : "Balance on Revolut X")
-                        Card {
-                            VStack(spacing: 6) {
-                                ForEach(store.balances) { balance in
-                                    HStack {
-                                        Text(balance.currency).font(.system(size: 11.5, weight: .semibold))
-                                        Spacer()
-                                        Text(Fmt.qty(balance.total)).font(.system(size: 11.5)).monospacedDigit()
-                                        if balance.available != balance.total {
-                                            Text("(\(Fmt.qty(balance.available)) available)").font(.system(size: 10)).foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             // App
             VStack(alignment: .leading, spacing: 6) {
                 SectionLabel("App")

@@ -98,7 +98,7 @@ struct LiveTradingSection: View {
                 bullet("All bots you create afterwards buy and sell with your real balance on Revolut X.")
             } else {
                 bullet("All existing bots are switched to live as well and then trade with your real balance on Revolut X: \(store.bots.map(\.name).joined(separator: ", ")).")
-                bullet("If a bot should not trade with real money, you have to delete it first (Manage bots).", emphasized: true)
+                bullet("If a bot should not trade with real money, you have to delete it first (Bots tab).", emphasized: true)
             }
             if !openPaperPositions.isEmpty {
                 bullet("Open paper positions (\(openPaperPositions.map(\.name).joined(separator: ", "))) are still sold simulated, afterwards the bot buys live.")

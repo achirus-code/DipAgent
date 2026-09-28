@@ -141,7 +141,7 @@
 "1/2 · Attention: real money" = "1/2 · Achtung: echtes Geld";
 "All bots you create afterwards buy and sell with your real balance on Revolut X." = "Alle Bots, die du danach anlegst, kaufen und verkaufen mit deinem echten Guthaben auf Revolut X.";
 "All existing bots are switched to live as well and then trade with your real balance on Revolut X: %@." = "Alle bestehenden Bots werden ebenfalls live geschaltet und handeln dann mit deinem echten Guthaben auf Revolut X: %@.";
-"If a bot should not trade with real money, you have to delete it first (Manage bots)." = "Soll ein Bot nicht mit echtem Geld handeln, musst du ihn vorher löschen (Bots verwalten).";
+"If a bot should not trade with real money, you have to delete it first (Bots tab)." = "Soll ein Bot nicht mit echtem Geld handeln, musst du ihn vorher löschen (Tab „Bots“).";
 "Open paper positions (%@) are still sold simulated, afterwards the bot buys live." = "Offene Paper-Positionen (%@) werden noch simuliert verkauft, danach kauft der Bot live.";
 "Losses are possible. “Risk & limits” caps open positions and capital." = "Verluste sind möglich. „Risiko & Limits“ begrenzt offene Positionen und Kapital.";
 "I understand that real money is used." = "Ich habe verstanden, dass echtes Geld eingesetzt wird.";
@@ -179,11 +179,9 @@
 "%@ trades" = "%@ Trades";
 
 /* SettingsView.swift */
-"Manage bots" = "Bots verwalten";
-"Create new bot" = "Neuen Bot anlegen";
 "Balance (demo)" = "Guthaben (Demo)";
 "Balance on Revolut X" = "Guthaben auf Revolut X";
-"(%@ available)" = "(%@ frei)";
+"Available now · %@ in total" = "Jetzt verfügbar · insgesamt %@";
 "Notify about new trades" = "Mitteilung bei neuen Trades";
 "Launch at login" = "Bei der Anmeldung starten";
 "Language" = "Sprache";

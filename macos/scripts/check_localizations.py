@@ -21,7 +21,7 @@ RESOURCES = ROOT / "Resources"
 
 # literals that are not UI text (identifiers, protocol values, product names …)
 IGNORE = {
-    "EUR", "PAPER", "LIVE", "Revolut X", "DipAgent", "English", "Deutsch", "System",
+    "EUR", "USD", "GBP", "CHF", "PLN", "PAPER", "LIVE", "Revolut X", "DipAgent", "English", "Deutsch", "System",
     "Authorization", "Accept", "Accept-Language", "Content-Type", "application/json",
     "GET", "POST", "PUT", "DELETE", "AppleLanguages", "LIVE", "Bots", "Trades", "Name", "Agent",
     " · Paper", " (Paper)", " · ", "–", "App", "ETH-EUR", "-EUR", "apiToken",
