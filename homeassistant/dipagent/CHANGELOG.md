@@ -2,6 +2,39 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.0] – 2026-09-28
+
+### Changed
+
+- **A position is never sold at a loss by a target rule.** Before every strategy sell the agent checks the net
+  proceeds at the current bid – sell fee included, rounded up to a full cent the way Revolut X does it for fiat –
+  and holds the position while they are below its cost (`engine.hold_no_loss` status). Only the stop-loss, a
+  manual "Sell position now" and the end of live trading may realize a loss. Background: a 2 € dip position was
+  sold at "+0.33 %" gross and ended at −0.01 € because the sell fee was rounded from 0.0018 € to 0.01 €.
+- **Dip buyer:** the minimum profit can no longer be negative.
+- **Rebound + trailing stop:** once activated, the trailing stop never sits below break-even (cost plus sell fee),
+  so a trailing distance wider than the activation cannot turn into a loss.
+- **Price zones:** a reached target price is only sold when it also covers the entry; otherwise the bot holds
+  and says so.
+- `GET /api/status` reports the exchange fee (`taker_fee`), `GET /api/summary` the fees paid per currency.
+
+### Added
+
+- **Bot editor: cost check.** Below the rules the app shows what a buy plus sell costs at the chosen amount and
+  whether the rules' profit target covers it; tiny orders (cent-rounded fee) get a warning with one-click fixes.
+- **Bots tab:** bots are grouped into *Active* and *Stopped*, stopped bots get a compact card. A small sort menu
+  (running first, result, name, newest) sits in the header, "New bot" moved below the list. Tab order is now
+  Bots · Trades · Settings.
+- **Statistics card:** the total result is the headline; fees so far and the Revolut X balance (cash plus open
+  live positions) sit below it as small lines. Losses are shown in the normal text color, not red.
+- **Panel height** can be changed by dragging its bottom edge; the height is remembered.
+- **Refresh interval** options are now 30 s, 60 s, 2 min and 5 min (default 60 s).
+- *Settings → Trading mode* moves below the agent details once live trading is switched on.
+
+### Fixed
+
+- Results and percentages no longer show "-0,00" for values that round to zero.
+
 ## [1.2.0] – 2026-09-28
 
 ### Added
