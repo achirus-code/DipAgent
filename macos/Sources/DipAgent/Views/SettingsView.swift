@@ -19,7 +19,9 @@ struct SettingsView: View {
                 agentSection
             }
 
-            if store.isConnected, store.status?.exchange != "mock" {
+            // Trading mode stays at the top until live trading is switched on; after that it is rarely
+            // needed and moves down next to the other agent details.
+            if showsTradingMode, !liveTradingActive {
                 LiveTradingSection()
             }
 
@@ -34,10 +36,10 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         labeled("Refresh") {
                             Picker("", selection: $store.refreshInterval) {
-                                Text(verbatim: "5 s").tag(5.0)
-                                Text(verbatim: "15 s").tag(15.0)
                                 Text(verbatim: "30 s").tag(30.0)
                                 Text(verbatim: "60 s").tag(60.0)
+                                Text(verbatim: "2 min").tag(120.0)
+                                Text(verbatim: "5 min").tag(300.0)
                             }
                             .pickerStyle(.segmented)
                             .labelsHidden()
@@ -81,6 +83,9 @@ struct SettingsView: View {
                 if let info = store.exchangeInfo {
                     ExchangeSection(info: info, open: open)
                 }
+                if showsTradingMode, liveTradingActive {
+                    LiveTradingSection()
+                }
                 BackupSection()
             }
 
@@ -100,6 +105,9 @@ struct SettingsView: View {
             launchAtLogin = store.launchAtLogin
         }
     }
+
+    private var showsTradingMode: Bool { store.isConnected && store.status?.exchange != "mock" }
+    private var liveTradingActive: Bool { store.status?.liveTradingAllowed ?? false }
 
     private var agentSection: some View {
         VStack(alignment: .leading, spacing: 6) {

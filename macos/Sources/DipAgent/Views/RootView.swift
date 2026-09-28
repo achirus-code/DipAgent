@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum MainTab: String, CaseIterable, Identifiable {
-    case trades, bots, settings
+    case bots, trades, settings
     var id: String { rawValue }
 
     var title: LocalizedStringKey {
@@ -48,7 +48,8 @@ struct RootView: View {
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
         }
-        .frame(width: 400, height: 620)
+        .frame(width: 400)
+        .frame(minHeight: StatusPanel.minHeight, maxHeight: .infinity) // height follows the panel (resizable at its bottom edge)
         .animation(.snappy(duration: 0.28), value: route)
         .onChange(of: route, initial: true) { _, newRoute in
             store.keepPanelOpen = newRoute == .exchangeSetup
@@ -167,6 +168,8 @@ struct HeaderView: View {
                     summary: summary,
                     liveAllowed: store.status?.liveTradingAllowed ?? false,
                     balances: store.balances,
+                    bots: store.bots,
+                    trades: store.trades,
                     isDemo: store.status?.exchange == "mock"
                 )
             }
@@ -206,11 +209,13 @@ struct SummaryCard: View {
     let summary: Summary
     let liveAllowed: Bool
     var balances: [Balance] = []
+    var bots: [Bot] = []
+    var trades: [Trade] = []
     var isDemo = false
 
     var body: some View {
-        let main = summary.currencies.first
-        let currency = main?.currency ?? "EUR"
+        let result = summary.currencies.first
+        let currency = result?.currency ?? cash.first?.currency ?? "EUR"
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Total result").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
@@ -223,42 +228,58 @@ struct SummaryCard: View {
                         .help("All orders are only simulated. Live trading: Settings → Trading mode")
                 }
             }
-            PnLText(value: main?.total ?? 0, currency: currency, font: .system(size: 28, weight: .bold, design: .rounded))
+            // The headline: what DipAgent has earned or lost in total (realized + open, after fees).
+            PnLText(value: result?.total ?? 0, currency: currency, font: .system(size: 28, weight: .bold, design: .rounded), calmLosses: true)
+                .help("Realized plus open result of all bots, fees already deducted.")
             HStack(spacing: 0) {
-                metric("Realized", main?.realized ?? 0, currency)
-                metric("Open", main?.unrealized ?? 0, currency)
-                metric("Today", main?.today ?? 0, currency)
+                metric("Realized", result?.realized ?? 0, currency)
+                metric("Open", result?.unrealized ?? 0, currency)
+                metric("Today", result?.today ?? 0, currency)
             }
-            ForEach(summary.currencies.dropFirst()) { other in
-                HStack {
-                    Text(other.currency).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary)
-                    Spacer()
-                    PnLText(value: other.total, currency: other.currency, font: .system(size: 11, weight: .semibold))
+
+            if let balance = cash.first(where: { $0.currency == currency }) {
+                let positions = positionsValue(currency)
+                Divider().opacity(0.4)
+                infoRow(balanceTitle, icon: "banknote") {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(Fmt.money(balance.total + positions, currency))
+                            .font(.system(size: 11.5, weight: .semibold, design: .rounded)).monospacedDigit()
+                        Text("\(Fmt.money(balance.available, currency)) available · \(Fmt.money(positions, currency)) in positions")
+                            .font(.system(size: 9.5)).foregroundStyle(.secondary).monospacedDigit()
+                    }
                 }
+                .help("Cash on the exchange plus the current value of all open live positions.")
             }
-            Divider().opacity(0.4)
-            if !cash.isEmpty {
-                HStack(alignment: .firstTextBaseline) {
-                    Label(balanceTitle, systemImage: "banknote")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                        .labelStyle(CompactLabelStyle())
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        ForEach(cash) { balance in
-                            Text(Fmt.money(balance.available, balance.currency))
-                                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                                .monospacedDigit()
-                                .foregroundStyle(balance.available > 0 ? Color.green : Color.secondary)
-                                .help("Available now · \(Fmt.money(balance.total, balance.currency)) in total")
+
+            let others = otherCurrencies(except: currency)
+            if !others.isEmpty {
+                Divider().opacity(0.4)
+                ForEach(others, id: \.self) { other in
+                    HStack(spacing: 8) {
+                        Text(other).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary)
+                        Spacer()
+                        if let balance = cash.first(where: { $0.currency == other }) {
+                            Text(Fmt.money(balance.total + positionsValue(other), other))
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .monospacedDigit().foregroundStyle(.secondary)
+                        }
+                        if let result = summary.currencies.first(where: { $0.currency == other }) {
+                            PnLText(value: result.total, currency: other, font: .system(size: 11, weight: .semibold), calmLosses: true)
                         }
                     }
                 }
             }
+
+            Divider().opacity(0.4)
             HStack(spacing: 12) {
                 Label("\(String(summary.botsActive))/\(String(summary.botsTotal)) bots active", systemImage: "cpu")
                 Label("\(openPositionsText) open", systemImage: "tray.full")
                 Label("\(String(summary.tradesCount)) trades", systemImage: "arrow.left.arrow.right")
+                Spacer(minLength: 0)
+                // Fees are already part of the result – just a footnote
+                Text("\(Fmt.money(fees(currency), currency)) fees")
+                    .foregroundStyle(.tertiary)
+                    .help("Exchange fees of all buys and sells – already included in the result.")
             }
             .font(.system(size: 10.5))
             .foregroundStyle(.secondary)
@@ -269,7 +290,8 @@ struct SummaryCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [(main?.total ?? 0).pnlColor.opacity(0.16), Color.accentColor.opacity(0.06)],
+                        // green tint when in profit, otherwise the neutral accent – never red
+                        colors: [((result?.total ?? 0) >= 0.005 ? Color.green : Color.accentColor).opacity(0.16), Color.accentColor.opacity(0.06)],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                 )
@@ -291,6 +313,29 @@ struct SummaryCard: View {
             .sorted { (quotes.firstIndex(of: $0.currency) ?? .max, $0.currency) < (quotes.firstIndex(of: $1.currency) ?? .max, $1.currency) }
     }
 
+    /// Fees paid in this currency – from the agent's summary, or summed from the loaded trades with older agents.
+    private func fees(_ currency: String) -> Double {
+        if let fees = summary.currencies.first(where: { $0.currency == currency })?.fees { return fees }
+        return trades.filter { $0.quote == currency }.reduce(0) { $0 + $1.fee }
+    }
+
+    /// Current market value of the positions that really sit on the exchange (paper positions are only simulated).
+    private func positionsValue(_ currency: String) -> Double {
+        bots.filter { $0.quoteCurrency == currency }
+            .compactMap(\.position)
+            .filter { $0.paper != true }
+            .reduce(0) { $0 + $1.value }
+    }
+
+    /// Other currencies with a balance or a result, in the order of the summary.
+    private func otherCurrencies(except main: String) -> [String] {
+        var seen: [String] = []
+        for code in summary.currencies.map(\.currency) + cash.map(\.currency) where code != main && !seen.contains(code) {
+            seen.append(code)
+        }
+        return seen
+    }
+
     /// "2/3" when a position limit is set, otherwise "2".
     private var openPositionsText: String {
         guard let max = summary.maxOpenPositions, max > 0 else { return String(summary.openPositions) }
@@ -300,9 +345,20 @@ struct SummaryCard: View {
     private func metric(_ title: LocalizedStringKey, _ value: Double, _ currency: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
-            PnLText(value: value, currency: currency, font: .system(size: 12.5, weight: .semibold, design: .rounded))
+            PnLText(value: value, currency: currency, font: .system(size: 12.5, weight: .semibold, design: .rounded), calmLosses: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func infoRow<Content: View>(_ title: LocalizedStringKey, icon: String, @ViewBuilder value: () -> Content) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Label(title, systemImage: icon)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .labelStyle(CompactLabelStyle())
+            Spacer()
+            value()
+        }
     }
 }
 

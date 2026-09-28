@@ -87,6 +87,72 @@ async def test_dip_buys_after_drop_and_sells_on_recovery():
     assert isinstance(d.action, Sell)
 
 
+@pytest.mark.asyncio
+async def test_target_rules_never_sell_at_a_loss(tmp_path: Path):
+    """A 2 € dip position: +0.33 % gross looks like a profit, but the cent-rounded sell fee makes it a loss."""
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Tiny", "dip", "ETH-EUR", {"amount": 2, "sell_mode": "profit", "take_profit": 0.1}, True, True)
+    await engine.tick()
+    position = db.get_bot(bot_id)["state"]["position"]
+    assert position
+    ex.price = Decimal("1976.5")  # +0.33 % gross ≥ target, but 0.01 € fee on a 2 € sale = 0.5 %
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["position"], bot["status"]
+    assert "never sells at a loss" in render(bot["status"], "en")
+    ex.price = Decimal("2000")  # +1.5 %: clearly above cost + fee
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"] is None
+    assert Decimal(db.list_trades(bot_id)[0]["pnl"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_stop_loss_may_sell_at_a_loss(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Stop", "dip", "ETH-EUR", {"amount": 50, "stop_loss": 2}, True, True)
+    await engine.tick()
+    ex.price = Decimal("1900")  # −3.5 %
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"] is None
+    assert Decimal(db.list_trades(bot_id)[0]["pnl"]) < 0
+
+
+@pytest.mark.asyncio
+async def test_zones_wait_for_break_even_when_target_is_below_entry():
+    s = STRATEGIES["zones"]
+    ex = FakeExchange("2000", "1900")
+    pos = Position(Decimal("0.025"), Decimal("50"), 0, Decimal("1900"))  # entry 2000
+    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
+    c = Context(s.normalize({"buy_below": 1950, "sell_above": 1850}), pos, {}, view)
+    d = await s.evaluate(c)  # target 1850 reached, but the position is at −5 %
+    assert d.action is None and "below break-even" in render(d.status, "en")
+    ex.price = Decimal("2010")
+    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
+    d = await s.evaluate(Context(s.normalize({"buy_below": 1950, "sell_above": 1850}), pos, {}, view))
+    assert isinstance(d.action, Sell)
+
+
+@pytest.mark.asyncio
+async def test_trailing_stop_never_below_break_even():
+    s = STRATEGIES["trailing"]
+    pos = Position(Decimal("0.025"), Decimal("50"), 0, Decimal("2030"))  # entry 2000, peak 2030 (+1.5 %)
+    # trail 2 % from the peak would be 1989.4 – below the entry; the stop is lifted to break-even instead
+    ex = FakeExchange("2000", "1995")
+    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
+    d = await s.evaluate(Context(s.normalize({"activation": 1.5, "trail": 2}), pos, {}, view))
+    assert isinstance(d.action, Sell)  # price below the lifted stop -> sell signal (the engine then checks the net)
+    ex.price = Decimal("2020")
+    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
+    d = await s.evaluate(Context(s.normalize({"activation": 1.5, "trail": 2}), pos, {}, view))
+    assert d.action is None and "Trailing active" in render(d.status, "en")
+
+
+def test_min_profit_cannot_be_negative():
+    assert STRATEGIES["dip"].normalize({"min_profit": -1})["min_profit"] == 0
+
+
 def test_signature_matches_revolut_spec():
     key = Ed25519PrivateKey.generate()
     pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())

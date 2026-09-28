@@ -13,6 +13,15 @@ from ..i18n import L, Problem
 
 CANDLE_INTERVALS = [5, 15, 30, 60, 240, 1440]  # minutes, as supported by Revolut X
 HOUR_MS = 3_600_000
+FIAT = {"EUR", "USD", "GBP", "CHF", "PLN"}
+
+
+def sell_fee(gross: Decimal, fee_rate: float, quote: str) -> Decimal:
+    """Fee for a sale of ``gross`` – Revolut X rounds fees in fiat up to a full cent, which matters for tiny orders."""
+    fee = gross * Decimal(str(fee_rate))
+    if quote in FIAT:
+        fee = (fee * 100).to_integral_value(rounding="ROUND_CEILING") / 100
+    return fee
 
 
 @dataclass
@@ -89,6 +98,17 @@ class Position:
             return 0.0
         return float((self.value(price) - self.cost) / self.cost * 100)
 
+    def net_proceeds(self, price: Decimal, fee_rate: float, quote: str) -> Decimal:
+        """What selling everything at ``price`` leaves after the exchange fee."""
+        gross = self.value(price)
+        return gross - sell_fee(gross, fee_rate, quote)
+
+    def break_even_price(self, fee_rate: float, quote: str) -> Decimal:
+        """The price at which a sale just recovers the cost (buy fee included) after the sell fee."""
+        if not self.qty:
+            return Decimal(0)
+        return (self.cost + sell_fee(self.cost, fee_rate, quote)) / self.qty
+
     def to_state(self) -> dict[str, Any]:
         return {
             "qty": str(self.qty),
@@ -121,6 +141,9 @@ class Buy:
 @dataclass
 class Sell:
     reason: Message  # always sells the whole position
+    # True for protective sells (stop-loss): they may realize a loss. Every other sell is only executed
+    # when it at least recovers the cost after fees – a position is never sold at a loss by a target rule.
+    stop: bool = False
 
 
 @dataclass
@@ -198,6 +221,7 @@ class Context:
     state: dict[str, Any]
     market: MarketView
     quote: str = "EUR"
+    fee_rate: float = 0.0009  # exchange fee per order, e.g. 0.09 %
 
     @property
     def now(self) -> int:

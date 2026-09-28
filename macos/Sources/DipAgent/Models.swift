@@ -56,6 +56,8 @@ struct ServerStatus: Codable {
     let liveTradingAllowed: Bool
     let lastTick: Int64?
     let tickSeconds: Int
+    /// Exchange fee per order as a fraction (0.0009 = 0.09 %); older agents don't send it.
+    let takerFee: Double?
 
     enum CodingKeys: String, CodingKey {
         case version, exchange
@@ -65,6 +67,7 @@ struct ServerStatus: Codable {
         case liveTradingAllowed = "live_trading_allowed"
         case lastTick = "last_tick"
         case tickSeconds = "tick_seconds"
+        case takerFee = "taker_fee"
     }
 }
 
@@ -75,6 +78,8 @@ struct CurrencyTotal: Codable, Identifiable {
     let today: Double
     let invested: Double
     let total: Double
+    /// Exchange fees paid so far; older agents don't send it.
+    let fees: Double?
     var id: String { currency }
 }
 

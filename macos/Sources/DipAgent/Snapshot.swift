@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Developer aid: `DipAgent --snapshot <dir> -serverURL <url> -apiToken <token>`
+/// Developer aid: `DipAgent --snapshot <dir> -serverURL <url> -apiToken <token> [-snapshotHeight 1200]`
 /// renders every screen of the panel (light + dark) into PNG files and quits.
 enum SnapshotRunner {
     /// Returns true if snapshot mode was started (the app then quits by itself).
@@ -10,6 +10,7 @@ enum SnapshotRunner {
         let args = ProcessInfo.processInfo.arguments
         guard let index = args.firstIndex(of: "--snapshot"), index + 1 < args.count else { return false }
         let dir = URL(fileURLWithPath: args[index + 1])
+        let height = max(CGFloat(UserDefaults.standard.integer(forKey: "snapshotHeight")), StatusPanel.defaultHeight)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         Task { @MainActor in
@@ -30,13 +31,13 @@ enum SnapshotRunner {
                         } else if full {
                             SettingsView(open: { _ in }).padding(14).frame(width: 400, height: 1500, alignment: .top)
                         } else {
-                            RootView(initialTab: tab, initialRoute: route)
+                            RootView(initialTab: tab, initialRoute: route).frame(height: height)
                         }
                     }
                     .environment(store)
                     .background(.regularMaterial)
                     let host = NSHostingView(rootView: root)
-                    host.frame = NSRect(x: 0, y: 0, width: 400, height: full ? 1500 : 620)
+                    host.frame = NSRect(x: 0, y: 0, width: 400, height: full ? 1500 : height)
                     let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
                     window.appearance = NSAppearance(named: appearance)
                     window.contentView = host

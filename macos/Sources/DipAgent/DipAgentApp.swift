@@ -34,6 +34,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let panel = StatusPanel(rootView: RootView().environment(store))
         self.panel = panel
+        // The user can drag the bottom edge to make the panel taller – remember that height.
+        NotificationCenter.default.addObserver(forName: NSWindow.didEndLiveResizeNotification, object: panel, queue: .main) { [weak panel] _ in
+            Task { @MainActor in
+                if let panel { StatusPanel.savedHeight = panel.frame.height }
+            }
+        }
+
         // clicks into other apps / the desktop …
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in self?.closeUnlessPinned() }
@@ -71,6 +78,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if opening {
             let iconFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
             let screen = (buttonWindow.screen ?? NSScreen.main)?.visibleFrame ?? .zero
+            // Never taller than the screen – e.g. after moving to a smaller display
+            let height = min(panel.frame.height, screen.height - 12)
+            if height != panel.frame.height {
+                panel.setContentSize(NSSize(width: panel.frame.width, height: height))
+            }
             // The icon must sit in the menu bar (above the visible area); otherwise fall back to the top-right corner
             let iconIsPlaced = iconFrame.width > 0 && iconFrame.minY >= screen.maxY - 4
             var x = iconIsPlaced ? iconFrame.midX - panel.frame.width / 2 : screen.maxX
@@ -115,10 +127,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 /// Borderless floating panel with the translucent menu look; closing is handled by the AppDelegate.
+/// The width is fixed, the height can be changed by dragging the bottom edge (AppKit resizes borderless
+/// windows at their edges when they are `.resizable`).
 final class StatusPanel: NSPanel {
+    static let width: CGFloat = 400
+    static let minHeight: CGFloat = 480
+    static let defaultHeight: CGFloat = 620
+
+    static var savedHeight: CGFloat {
+        get {
+            let v = UserDefaults.standard.double(forKey: "panelHeight")
+            return v >= minHeight ? v : defaultHeight
+        }
+        set { UserDefaults.standard.set(Double(newValue), forKey: "panelHeight") }
+    }
+
     init<Content: View>(rootView: Content) {
-        let size = NSSize(width: 400, height: 620)
-        super.init(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        let size = NSSize(width: Self.width, height: Self.savedHeight)
+        super.init(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .resizable], backing: .buffered, defer: false)
+        minSize = NSSize(width: Self.width, height: Self.minHeight)
+        maxSize = NSSize(width: Self.width, height: 4000)
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         hidesOnDeactivate = false
@@ -134,6 +162,7 @@ final class StatusPanel: NSPanel {
         background.maskImage = Self.roundedMask(radius: 14)
 
         let host = NSHostingView(rootView: rootView)
+        host.sizingOptions = [] // the window decides the size, not the SwiftUI content
         host.frame = background.bounds
         host.autoresizingMask = [.width, .height]
         background.addSubview(host)

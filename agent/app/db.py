@@ -244,6 +244,10 @@ class Database:
             "SELECT symbol, SUM(CAST(pnl AS REAL)) AS pnl FROM trades WHERE pnl IS NOT NULL GROUP BY symbol"
         )
 
+    def fees_by_symbol(self) -> list[dict[str, Any]]:
+        """Exchange fees paid so far (buys and sells), in the quote currency."""
+        return self._all("SELECT symbol, SUM(CAST(fee AS REAL)) AS fee FROM trades GROUP BY symbol")
+
     # --- Events -----------------------------------------------------------
 
     def add_event(self, bot_id: int | None, level: str, message: dict | str) -> None:

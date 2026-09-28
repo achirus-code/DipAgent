@@ -20,9 +20,12 @@ final class AppStore {
     // `-apiToken <t>` on the command line overrides the keychain (used by the snapshot tool)
     var token: String = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["apiToken"] as? String
         ?? Keychain.get("apiToken") ?? ""
+    /// Seconds between two refreshes – one of `refreshIntervals`.
+    static let refreshIntervals: [Double] = [30, 60, 120, 300]
     var refreshInterval: Double = {
         let v = UserDefaults.standard.double(forKey: "refreshInterval")
-        return v > 0 ? v : 15
+        // Older versions allowed 5 s / 15 s – snap to the nearest option that still exists.
+        return refreshIntervals.contains(v) ? v : (v > 0 && v < 30 ? 30 : 60)
     }() {
         didSet {
             UserDefaults.standard.set(refreshInterval, forKey: "refreshInterval")

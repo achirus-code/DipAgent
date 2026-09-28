@@ -1,32 +1,146 @@
 import SwiftUI
 
+/// How the bot list is ordered (within "Active" and "Stopped").
+enum BotSort: String, CaseIterable, Identifiable {
+    case running, result, name, newest
+    var id: String { rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .running: return "Running first"
+        case .result: return "Result"
+        case .name: return "Name"
+        case .newest: return "Newest"
+        }
+    }
+
+    /// Stable: bots that compare equal keep their order from the agent.
+    func apply(_ bots: [Bot]) -> [Bot] {
+        let indexed = bots.enumerated().map { ($0.offset, $0.element) }
+        let sorted: [(Int, Bot)]
+        switch self {
+        case .running:
+            sorted = indexed.sorted { ($0.1.position == nil ? 1 : 0, $0.0) < ($1.1.position == nil ? 1 : 0, $1.0) }
+        case .result:
+            sorted = indexed.sorted { ($0.1.totalPnl, -$0.0) > ($1.1.totalPnl, -$1.0) }
+        case .name:
+            sorted = indexed.sorted { ($0.1.name.localizedCaseInsensitiveCompare($1.1.name), $0.0) < (.orderedSame, $1.0) }
+        case .newest:
+            sorted = indexed.sorted { ($0.1.createdAt, -$0.0) > ($1.1.createdAt, -$1.0) }
+        }
+        return sorted.map(\.1)
+    }
+}
+
+extension ComparisonResult: @retroactive Comparable {
+    public static func < (lhs: ComparisonResult, rhs: ComparisonResult) -> Bool { lhs.rawValue < rhs.rawValue }
+}
+
 struct BotsView: View {
     @Environment(AppStore.self) private var store
     let open: (Route?) -> Void
+    @AppStorage("botSort") private var sortKey = BotSort.running.rawValue
+
+    private var sort: BotSort { BotSort(rawValue: sortKey) ?? .running }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if !store.isConnected {
                 EmptyStateView(icon: "bolt.horizontal.circle", title: "Not connected", message: "Connect the app to your agent in the settings.")
             } else {
-                SectionLabel("My bots", trailing: AnyView(
-                    Button { open(.editor(nil)) } label: {
-                        Label("New bot", systemImage: "plus").font(.system(size: 11, weight: .medium))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-                ))
+                SectionLabel("My bots", trailing: store.bots.count > 1 ? AnyView(sortMenu) : nil)
                 if store.bots.isEmpty {
                     EmptyStateView(icon: "cpu", title: "No bots yet", message: "Create your first bot – e.g. a dip buyer for ETH-EUR.")
                 } else {
-                    ForEach(store.bots) { bot in
-                        BotCard(bot: bot)
-                            .contentShape(Rectangle())
-                            .onTapGesture { open(.bot(bot.id)) }
+                    let active = sort.apply(store.bots.filter(\.enabled))
+                    let stopped = sort.apply(store.bots.filter { !$0.enabled })
+                    if !active.isEmpty {
+                        BotGroupLabel(title: "Active", count: active.count, color: .green)
+                        ForEach(active) { bot in
+                            BotCard(bot: bot)
+                                .contentShape(Rectangle())
+                                .onTapGesture { open(.bot(bot.id)) }
+                        }
+                    }
+                    if !stopped.isEmpty {
+                        BotGroupLabel(title: "Stopped", count: stopped.count, color: .gray)
+                            .padding(.top, active.isEmpty ? 0 : 6)
+                        ForEach(stopped) { bot in
+                            BotCard(bot: bot)
+                                .contentShape(Rectangle())
+                                .onTapGesture { open(.bot(bot.id)) }
+                        }
                     }
                 }
+                newBotButton
             }
         }
+        .animation(.snappy(duration: 0.25), value: store.bots.map(\.enabled))
+        .animation(.snappy(duration: 0.25), value: sortKey)
+    }
+
+    /// Below the list: a quiet, full-width "+ New bot" in the look of the cards.
+    private var newBotButton: some View {
+        Button { open(.editor(nil)) } label: {
+            Label("New bot", systemImage: "plus")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 2)
+    }
+
+    /// Compact, borderless: "⇅ Result ⌄" in the section header.
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort by", selection: $sortKey) {
+                ForEach(BotSort.allCases) { option in
+                    Text(option.title).tag(option.rawValue)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "arrow.up.arrow.down").font(.system(size: 9, weight: .semibold))
+                Text(sort.title).font(.system(size: 11, weight: .medium))
+                Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
+            }
+            .foregroundStyle(.secondary)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Sort bots")
+    }
+}
+
+/// "● Active · 3" – separates running bots from stopped ones in the list.
+struct BotGroupLabel: View {
+    let title: LocalizedStringKey
+    let count: Int
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(title).font(.system(size: 11, weight: .semibold))
+            Text(verbatim: String(count))
+                .font(.system(size: 10, weight: .semibold)).monospacedDigit()
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(Capsule().fill(Color.primary.opacity(0.07)))
+            Spacer()
+        }
+        .padding(.horizontal, 4)
     }
 }
 
@@ -36,35 +150,49 @@ struct BotCard: View {
     @State private var hovering = false
 
     var body: some View {
+        // Stopped bots get a compact, dimmed card: no market line and no status line – the group header
+        // already says "Stopped". Result and an open position stay visible, they still matter.
         Card {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: bot.enabled ? 10 : 8) {
                 HStack(spacing: 10) {
-                    IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: 34)
+                    IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: bot.enabled ? 34 : 28)
+                        .grayscale(bot.enabled ? 0 : 1)
+                        .opacity(bot.enabled ? 1 : 0.55)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 5) {
-                            Text(bot.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                            Text(bot.name)
+                                .font(.system(size: bot.enabled ? 13 : 12.5, weight: .semibold))
+                                .foregroundStyle(bot.enabled ? Color.primary : Color.secondary)
+                                .lineLimit(1)
                             if bot.paper { Badge(text: "PAPER", color: .orange) } else { Badge(text: "LIVE", color: .red, icon: "bolt.fill") }
                         }
                         Text(verbatim: "\(bot.symbol) · \(bot.strategyName)")
                             .font(.system(size: 10.5)).foregroundStyle(.secondary)
                     }
+                    .opacity(bot.enabled ? 1 : 0.8)
                     Spacer()
+                    if !bot.enabled {
+                        PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 12, weight: .semibold, design: .rounded))
+                            .opacity(0.8)
+                    }
                     RunToggle(bot: bot)
                 }
 
-                HStack(alignment: .firstTextBaseline) {
-                    if let market = bot.market {
-                        Text(Fmt.price(market.price, bot.quoteCurrency))
-                            .font(.system(size: 12, weight: .medium)).monospacedDigit()
-                        Text(verbatim: "\(Fmt.pct(market.change24h)) 24h")
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(market.change24h.pnlColor)
+                if bot.enabled {
+                    HStack(alignment: .firstTextBaseline) {
+                        if let market = bot.market {
+                            Text(Fmt.price(market.price, bot.quoteCurrency))
+                                .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                            Text(verbatim: "\(Fmt.pct(market.change24h)) 24h")
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(market.change24h.pnlColor)
+                        }
+                        Spacer()
+                        PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
                     }
-                    Spacer()
-                    PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
-                }
 
-                StatusLine(bot: bot)
+                    StatusLine(bot: bot)
+                }
 
                 if let position = bot.position {
                     PositionStrip(bot: bot, position: position)

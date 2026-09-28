@@ -39,9 +39,9 @@ class DipStrategy(Strategy):
               L("Sell as soon as the position has this much profit.", "Verkauf, sobald die Position so viel Gewinn hat."),
               min=0.1, max=100, step=0.1),
         Param("min_profit", L("Minimum profit", "Mindestgewinn"), "percent", 0.25,
-              L("With “Change recovered”, only sell with at least this profit (covers fees). Negative = sell at a loss if necessary.",
-                "Bei „Veränderung erreicht“ nur verkaufen, wenn mindestens dieser Gewinn erzielt wird (deckt Gebühren). Negativ = notfalls mit Verlust."),
-              min=-100, max=100, step=0.05),
+              L("With “Change recovered”, only sell with at least this profit. The bot never sells at a loss anyway – only the stop-loss does.",
+                "Bei „Veränderung erreicht“ nur verkaufen, wenn mindestens dieser Gewinn erzielt wird. Mit Verlust verkauft der Bot ohnehin nie – nur der Stop-Loss."),
+              min=0, max=100, step=0.05),
         Param("stop_loss", L("Stop-loss", "Stop-Loss"), "percent", 0.0,
               L("Sell at this loss. 0 = off.", "Verkauf bei so viel Verlust. 0 = aus."), min=0, max=90, step=0.5),
         Param("cooldown_minutes", L("Pause after selling", "Pause nach Verkauf"), "int", 60,
@@ -66,7 +66,7 @@ class DipStrategy(Strategy):
 
         profit = pos.pnl_pct(market.bid)
         if p["stop_loss"] > 0 and profit <= -p["stop_loss"]:
-            return Decision(m("stop_loss"), Sell(m("stop_loss.reason", profit=pct(profit))))
+            return Decision(m("stop_loss"), Sell(m("stop_loss.reason", profit=pct(profit)), stop=True))
 
         mode = p["sell_mode"]
         if mode in {"profit", "either"} and profit >= p["take_profit"]:

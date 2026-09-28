@@ -309,12 +309,17 @@ class Engine:
             state["position"] = position.to_state()
 
         _, quote = split_symbol(bot["symbol"])
-        ctx = Context(strategy.normalize(bot["params"]), position, state, view, quote)
+        ctx = Context(strategy.normalize(bot["params"]), position, state, view, quote, float(self.settings.taker_fee))
         decision = await strategy.evaluate(ctx)
 
         if isinstance(decision.action, Buy):
             return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason)
         if isinstance(decision.action, Sell) and position:
+            # Safety net: a target rule never sells at a loss. Fees, cent rounding and the sell fee are included –
+            # strategies compare the gross profit, which a 2 € order can lose to a fee rounded up to 0.01.
+            net = position.net_proceeds(view.bid, float(self.settings.taker_fee), quote)
+            if not decision.action.stop and net < position.cost:
+                return m("engine.hold_no_loss", net=money(net, quote), cost=money(position.cost, quote))
             return await self._sell(bot, state, view, decision.action.reason)
         return decision.status
 
@@ -665,10 +670,12 @@ class Engine:
         totals: dict[str, dict[str, float]] = {}
 
         def bucket(currency: str) -> dict[str, float]:
-            return totals.setdefault(currency, {"realized": 0.0, "unrealized": 0.0, "today": 0.0, "invested": 0.0})
+            return totals.setdefault(currency, {"realized": 0.0, "unrealized": 0.0, "today": 0.0, "invested": 0.0, "fees": 0.0})
 
         for row in self.db.realized_by_symbol():
             bucket(split_symbol(row["symbol"])[1])["realized"] += row["pnl"] or 0.0
+        for row in self.db.fees_by_symbol():
+            bucket(split_symbol(row["symbol"])[1])["fees"] += row["fee"] or 0.0
         for row in self.db.realized_since(start_of_day):
             bucket(split_symbol(row["symbol"])[1])["today"] += row["pnl"] or 0.0
         for b in bots:

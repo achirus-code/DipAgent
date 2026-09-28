@@ -206,6 +206,10 @@ CATALOG: dict[str, L] = {
     "zones.target": L("Target price reached", "Zielpreis erreicht"),
     "zones.target_reason": L("Price {price} ≥ {target}", "Kurs {price} ≥ {target}"),
     "zones.position": L("Position {profit} · sell above {target}", "Position {profit} · Verkauf über {target}"),
+    "zones.target_below_entry": L(
+        "Target reached at {price}, but below break-even {entry} · holding",
+        "Zielpreis {price} erreicht, aber unter Einstand {entry} · halte",
+    ),
     # --- savings plan
     "dca.take_profit_reason": L("Savings plan profit {profit} ≥ {target}", "Sparplan-Gewinn {profit} ≥ {target}"),
     "dca.max_buys": L(
@@ -257,6 +261,10 @@ CATALOG: dict[str, L] = {
     ),
     "engine.buy_skipped": L("Buy signal skipped · {reason}", "Kaufsignal übersprungen · {reason}"),
     "engine.no_position": L("No position", "Keine Position"),
+    "engine.hold_no_loss": L(
+        "Sell signal, but {net} after fees < cost {cost} · holding (never sells at a loss)",
+        "Verkaufssignal, aber {net} nach Gebühren < Einstand {cost} · halte (kein Verkauf im Minus)",
+    ),
     "engine.order_sent": L("Order {id} ({side}) sent", "Order {id} ({side}) gesendet"),
     "engine.order_not_found": L(
         "Order {id} could not be found at the exchange – bot stopped. Check the order on Revolut X before starting the bot again",

@@ -181,7 +181,6 @@
 /* SettingsView.swift */
 "Balance (demo)" = "Guthaben (Demo)";
 "Balance on Revolut X" = "Guthaben auf Revolut X";
-"Available now · %@ in total" = "Jetzt verfügbar · insgesamt %@";
 "Notify about new trades" = "Mitteilung bei neuen Trades";
 "Launch at login" = "Bei der Anmeldung starten";
 "Language" = "Sprache";
@@ -227,3 +226,19 @@
 "Buy %@" = "Kauf %@";
 "Sell %@" = "Verkauf %@";
 "%@\n%@ · Fee %@" = "%@\n%@ · Gebühr %@";
+"Cash on the exchange plus the current value of all open live positions." = "Guthaben auf der Börse plus aktueller Wert aller offenen Live-Positionen.";
+"Active" = "Aktiv";
+"Fees: about %@ per buy and sell (%@ of %@)" = "Gebühren: ca. %@ pro Kauf und Verkauf (%@ von %@)";
+"Covered by the rules – the bot sells with at least %@ gross profit." = "Von den Regeln gedeckt – der Bot verkauft mit mindestens %@ Bruttogewinn.";
+"The rules sell from %@ gross profit – after fees and price movement that ends in a loss. Aim for at least %@, or use larger orders." = "Die Regeln verkaufen ab %@ Bruttogewinn – nach Gebühren und Kursbewegung bleibt ein Verlust. Mindestens %@ anpeilen oder größere Orders nutzen.";
+"Very small orders: the fee is rounded up to a full cent, which makes every trade expensive. Use larger orders." = "Sehr kleine Orders: Die Gebühr wird auf einen vollen Cent aufgerundet, das macht jeden Trade teuer. Größere Orders nutzen.";
+"Sell from %@" = "Verkauf ab %@";
+"Amount %@" = "Betrag %@";
+"Realized plus open result of all bots, fees already deducted." = "Realisiertes plus offenes Ergebnis aller Bots, Gebühren bereits abgezogen.";
+"%@ fees" = "%@ Gebühren";
+"Exchange fees of all buys and sells – already included in the result." = "Börsengebühren aller Käufe und Verkäufe – im Ergebnis bereits enthalten.";
+"%@ available · %@ in positions" = "%@ verfügbar · %@ in Positionen";
+"Running first" = "Laufende zuerst";
+"Newest" = "Neueste";
+"Sort by" = "Sortieren nach";
+"Sort bots" = "Bots sortieren";

@@ -19,13 +19,20 @@ enum Fmt {
         f.currencyCode = currency
         f.maximumFractionDigits = digits
         f.minimumFractionDigits = 2
-        let text = f.string(from: NSNumber(value: value)) ?? "\(value)"
-        return signed && value >= 0.005 ? "+" + text : text
+        let rounded = value.rounded(toDigits: digits)
+        let text = f.string(from: NSNumber(value: rounded)) ?? "\(rounded)"
+        return signed && rounded > 0 ? "+" + text : text
     }
 
     /// Percent in the user's format, e.g. "+1.23%" (en) or "+1,23 %" (de).
     static func pct(_ value: Double) -> String {
-        (value / 100).formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always()))
+        (value.rounded(toDigits: 2) / 100)
+            .formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always(includingZero: false)))
+    }
+
+    /// Percent without a sign, e.g. "0.59%" – for rates and thresholds rather than results.
+    static func rate(_ value: Double) -> String {
+        (value.rounded(toDigits: 2) / 100).formatted(.percent.precision(.fractionLength(0...2)))
     }
 
     static func qty(_ value: Double) -> String {
@@ -38,6 +45,14 @@ enum Fmt {
 }
 
 extension Double {
+    /// Rounds to `digits` decimals and turns "-0" (or a tiny negative that rounds
+    /// to zero) into a plain 0 so it never shows as "-0,00".
+    func rounded(toDigits digits: Int) -> Double {
+        let factor = pow(10.0, Double(digits))
+        let result = (self * factor).rounded() / factor
+        return result == 0 ? 0 : result
+    }
+
     var pnlColor: Color {
         if self >= 0.005 { return .green }
         if self <= -0.005 { return .red }
@@ -87,12 +102,14 @@ struct PnLText: View {
     let value: Double
     let currency: String
     var font: Font = .system(size: 12, weight: .semibold)
+    /// Losses in the normal text color instead of red (used in the summary, which should not scream).
+    var calmLosses = false
 
     var body: some View {
         Text(Fmt.money(value, currency, signed: true))
             .font(font)
             .monospacedDigit()
-            .foregroundStyle(value.pnlColor)
+            .foregroundStyle(calmLosses && value < 0 ? Color.primary : value.pnlColor)
             .contentTransition(.numericText(value: value))
     }
 }

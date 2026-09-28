@@ -46,8 +46,12 @@ class PriceZoneStrategy(Strategy):
 
         bid = market.bid
         if p["stop_price"] > 0 and bid <= Decimal(str(p["stop_price"])):
-            return Decision(m("stop_loss"), Sell(m("zones.stop_reason", price=money(bid, q), stop=money(p["stop_price"], q))))
+            return Decision(m("stop_loss"), Sell(m("zones.stop_reason", price=money(bid, q), stop=money(p["stop_price"], q)), stop=True))
         if p["sell_above"] > 0 and bid >= Decimal(str(p["sell_above"])):
+            # the target price may sit below the entry (e.g. changed after buying) – then wait for break-even
+            break_even = pos.break_even_price(ctx.fee_rate, q)
+            if bid < break_even:
+                return Decision(m("zones.target_below_entry", price=money(bid, q), entry=money(break_even, q)))
             return Decision(m("zones.target"), Sell(m("zones.target_reason", price=money(bid, q), target=money(p["sell_above"], q))))
         return Decision(m("zones.position", profit=pct(pos.pnl_pct(bid)), target=money(p["sell_above"], q)))
 
@@ -137,10 +141,11 @@ class ReboundTrailingStrategy(Strategy):
 
         profit = pos.pnl_pct(market.bid)
         if p["stop_loss"] > 0 and profit <= -p["stop_loss"]:
-            return Decision(m("stop_loss"), Sell(m("stop_loss.reason", profit=pct(profit))))
+            return Decision(m("stop_loss"), Sell(m("stop_loss.reason", profit=pct(profit)), stop=True))
         peak_profit = float((pos.peak / pos.entry_price - 1) * 100) if pos.entry_price else 0.0
         if peak_profit >= p["activation"]:
-            stop = pos.peak * (1 - Decimal(str(p["trail"])) / 100)
+            # the trailing stop never sits below break-even: a trail wider than the activation must not turn into a loss
+            stop = max(pos.peak * (1 - Decimal(str(p["trail"])) / 100), pos.break_even_price(ctx.fee_rate, q))
             if market.price <= stop:
                 reason = m("trailing.triggered_reason", stop=money(stop, q), high=money(pos.peak, q), profit=pct(profit))
                 return Decision(m("trailing.triggered"), Sell(reason))

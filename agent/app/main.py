@@ -30,7 +30,7 @@ from .i18n import Problem, as_message, lang_from_header, m, render, text
 from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 BALANCES_CACHE_SECONDS = 10
 
@@ -192,6 +192,7 @@ def _status(lang: str) -> dict[str, Any]:
         "live_trading_allowed": engine.live_trading_enabled(),
         "last_tick": engine.last_tick,
         "tick_seconds": settings.tick_seconds,
+        "taker_fee": float(settings.taker_fee),
     }
 
 

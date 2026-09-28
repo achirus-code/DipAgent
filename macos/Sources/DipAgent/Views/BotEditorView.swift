@@ -63,6 +63,7 @@ struct BotEditorView: View {
                     basics
                     strategyPicker
                     rules
+                    costCheck
                     mode
                     if let error {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -183,6 +184,52 @@ struct BotEditorView: View {
                                 currency: quote
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Fees vs. the profit the rules aim for. Small orders are the trap: the exchange rounds the fee in fiat
+    /// up to a full cent, so 2 € orders pay 0.5 % instead of 0.09 % – and a 0.25 % minimum profit ends in a loss.
+    @ViewBuilder
+    private var costCheck: some View {
+        if let check = TradeCostCheck(strategy: strategyKey, params: values, quote: quote, feeRate: store.status?.takerFee ?? TradeCostCheck.defaultFeeRate) {
+            Card {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: check.covered ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(check.covered ? Color.green : Color.orange)
+                            .padding(.top, 1)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Fees: about \(Fmt.money(check.roundTripFee, quote)) per buy and sell (\(Fmt.rate(check.costPct)) of \(Fmt.money(check.amount, quote)))")
+                                .font(.system(size: 11, weight: .medium))
+                            if let profit = check.expectedProfitPct {
+                                if check.covered {
+                                    Text("Covered by the rules – the bot sells with at least \(Fmt.rate(profit)) gross profit.")
+                                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                                } else {
+                                    Text("The rules sell from \(Fmt.rate(profit)) gross profit – after fees and price movement that ends in a loss. Aim for at least \(Fmt.rate(check.neededProfitPct)), or use larger orders.")
+                                        .font(.system(size: 10.5)).foregroundStyle(.orange)
+                                }
+                            } else if !check.covered {
+                                Text("Very small orders: the fee is rounded up to a full cent, which makes every trade expensive. Use larger orders.")
+                                    .font(.system(size: 10.5)).foregroundStyle(.orange)
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if !check.covered {
+                        HStack(spacing: 8) {
+                            if let fix = check.profitFix {
+                                Button("Sell from \(Fmt.rate(fix.value))") { values[fix.key] = .number(fix.value) }
+                            }
+                            if let amount = check.suggestedAmount {
+                                Button("Amount \(Fmt.money(amount, quote))") { values["amount"] = .number(amount) }
+                            }
+                        }
+                        .controlSize(.small)
                     }
                 }
             }
@@ -365,5 +412,90 @@ struct ParamField: View {
                 value = .number(v)
             }
         )
+    }
+}
+
+/// What a buy + sell costs for the given rules, and whether the rules' profit target covers it.
+struct TradeCostCheck {
+    static let defaultFeeRate = 0.0009 // Revolut X taker fee: 0.09 %
+    /// Small margin on top of the fees: the price can move a little between the check and the fill.
+    /// Kept low so the strategies' defaults (0.25 % minimum profit at 50 €) still pass.
+    static let slippagePct = 0.05
+    static let fiat: Set<String> = ["EUR", "USD", "GBP", "CHF", "PLN"]
+
+    let amount: Double
+    let roundTripFee: Double
+    let costPct: Double
+    /// The lowest gross profit at which the rules sell (nil: the strategy has no such setting).
+    let expectedProfitPct: Double?
+    let neededProfitPct: Double
+    /// Parameter to raise so the rules cover the costs.
+    let profitFix: (key: String, value: Double)?
+    /// Order size from which the current profit setting would cover the costs.
+    let suggestedAmount: Double?
+
+    var covered: Bool {
+        guard let expectedProfitPct else { return costPct <= 0.5 }
+        return expectedProfitPct >= neededProfitPct
+    }
+
+    init?(strategy: String, params: [String: JSONValue], quote: String, feeRate: Double) {
+        guard let amount = params["amount"]?.double, amount > 0 else { return nil }
+        let (fee, pct) = Self.cost(amount: amount, quote: quote, feeRate: feeRate)
+        self.amount = amount
+        roundTripFee = fee
+        costPct = pct
+        neededProfitPct = ((pct + Self.slippagePct) * 20).rounded(.up) / 20 // steps of 0.05 %
+
+        func num(_ key: String) -> Double? { params[key]?.double }
+        var expected: Double?
+        var fix: (String, Double)?
+        switch strategy {
+        case "dip":
+            let mode = params["sell_mode"]?.string ?? "change"
+            let minProfit = num("min_profit") ?? 0, takeProfit = num("take_profit") ?? 0
+            switch mode {
+            case "profit": expected = takeProfit; fix = ("take_profit", neededProfitPct)
+            case "either": expected = min(minProfit, takeProfit); fix = (minProfit <= takeProfit ? "min_profit" : "take_profit", neededProfitPct)
+            default: expected = minProfit; fix = ("min_profit", neededProfitPct)
+            }
+        case "dca":
+            expected = num("take_profit"); fix = ("take_profit", neededProfitPct)
+        case "trailing":
+            // The trailing stop sells once the price has fallen back by "trail" from its peak
+            if let activation = num("activation"), let trail = num("trail") {
+                expected = activation - trail
+                fix = ("activation", ((trail + neededProfitPct) * 20).rounded(.up) / 20)
+            }
+        case "zones":
+            if let buy = num("buy_below"), let sell = num("sell_above"), buy > 0, sell > 0 {
+                expected = (sell / buy - 1) * 100
+            }
+        default:
+            break
+        }
+        expectedProfitPct = expected
+        profitFix = fix.map { (key: $0.0, value: $0.1) }
+
+        // Bigger orders dilute the cent rounding – find the size at which the current setting is enough
+        var suggestion: Double?
+        if let expected, expected > Self.slippagePct + feeRate * 200 {
+            var candidate = (amount / 5).rounded(.up) * 5
+            while candidate <= 500 {
+                let (_, candidatePct) = Self.cost(amount: candidate, quote: quote, feeRate: feeRate)
+                if ((candidatePct + Self.slippagePct) * 20).rounded(.up) / 20 <= expected { suggestion = candidate; break }
+                candidate += 5
+            }
+        }
+        suggestedAmount = suggestion
+    }
+
+    /// Buy fee is charged in the coin (exact), the sell fee in the quote currency – rounded up to a cent for fiat.
+    private static func cost(amount: Double, quote: String, feeRate: Double) -> (fee: Double, pct: Double) {
+        let buyFee = amount * feeRate
+        var sellFee = amount * feeRate
+        if fiat.contains(quote) { sellFee = (sellFee * 100).rounded(.up) / 100 }
+        let fee = buyFee + sellFee
+        return (fee, fee / amount * 100)
     }
 }
