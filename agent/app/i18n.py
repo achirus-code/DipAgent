@@ -259,8 +259,12 @@ CATALOG: dict[str, L] = {
     "engine.no_position": L("No position", "Keine Position"),
     "engine.order_sent": L("Order {id} ({side}) sent", "Order {id} ({side}) gesendet"),
     "engine.order_not_found": L(
-        "The order was not created at the exchange – discarded",
-        "Order wurde bei der Börse nicht angelegt – verworfen",
+        "Order {id} could not be found at the exchange – bot stopped. Check the order on Revolut X before starting the bot again",
+        "Order {id} ist bei der Börse nicht auffindbar – Bot gestoppt. Bitte die Order auf Revolut X prüfen, bevor der Bot wieder gestartet wird",
+    ),
+    "engine.mode_changed_close": L(
+        "Paper position closed – live trading enabled",
+        "Paper-Position geschlossen – Live-Handel aktiviert",
     ),
     "engine.order_booked": L("Order already booked", "Order bereits verbucht"),
     "engine.order_failed": L("Order {status}", "Order {status}"),
@@ -327,16 +331,16 @@ CATALOG: dict[str, L] = {
         "Revolut X nicht erreichbar – Live-Handel bleibt aus: {error}",
     ),
     "api.locked_pair_strategy": L(
-        "Trading pair/strategy cannot be changed while a position is open",
-        "Handelspaar/Strategie kann bei offener Position nicht geändert werden",
+        "Trading pair/strategy cannot be changed while a position or order is open",
+        "Handelspaar/Strategie kann bei offener Position oder laufender Order nicht geändert werden",
     ),
     "api.locked_mode": L(
-        "Paper/live mode cannot be switched while a position is open",
-        "Paper-/Live-Modus kann bei offener Position nicht gewechselt werden",
+        "Paper/live mode cannot be switched while a position or order is open",
+        "Paper-/Live-Modus kann bei offener Position oder laufender Order nicht gewechselt werden",
     ),
     "api.delete_open_position": L(
-        "The bot has an open position – close it first or delete with force",
-        "Bot hat eine offene Position – erst schließen oder mit force löschen",
+        "The bot has an open position or order – close it first or delete with force",
+        "Bot hat eine offene Position oder laufende Order – erst schließen oder mit force löschen",
     ),
     # --- statuses and events
     "status.starting": L("Starting …", "Wird gestartet …"),

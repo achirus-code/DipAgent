@@ -9,6 +9,7 @@ import asyncio
 import logging
 import re
 import secrets
+import time
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Any
@@ -27,7 +28,9 @@ from .i18n import Problem, as_message, lang_from_header, m, render, text
 from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
+# the app polls balances every few seconds – don't turn every poll into an exchange request
+BALANCES_CACHE_SECONDS = 10
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("dipagent")
@@ -67,17 +70,16 @@ def build_exchange() -> Exchange:
     return RevolutXExchange(RevolutXClient(api_key, private_pem, settings.revx_base_url))
 
 
-async def swap_exchange(new: Exchange) -> None:
+def swap_exchange(new: Exchange) -> None:
     """Switch the engine to new credentials without restarting the container."""
-    old = engine.exchange
-    engine.exchange = new
-    engine.exchange_error = None
-    await old.close()
-    engine.wake()
+    global _balances_cache
+    _balances_cache = None
+    engine.replace_exchange(new)
 
 
 credentials = CredentialStore(settings)
 engine = Engine(db, build_exchange(), settings)
+_balances_cache: tuple[float, dict[str, tuple[Decimal, Decimal]]] | None = None
 
 
 @asynccontextmanager
@@ -86,8 +88,14 @@ async def lifespan(_: FastAPI):
     if not engine.live_trading_enabled():
         log.warning("Live trading is off – all bots trade simulated (paper trading)")
     yield
+    # let a tick that is tracking an order finish (its pending order is persisted either way)
     task.cancel()
-    await engine.exchange.close()
+    try:
+        await asyncio.wait_for(task, timeout=10)
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        pass
+    await engine.shutdown()
+    db.close()
 
 
 app = FastAPI(title="DipAgent", version=VERSION, lifespan=lifespan)
@@ -259,7 +267,7 @@ async def save_credentials(body: ApiKeyIn, lang: str = Depends(get_lang)) -> dic
         raise fail(502, lang, "api.revx_unreachable", error=str(exc)) from exc
 
     credentials.save(api_key, private_pem)
-    await swap_exchange(RevolutXExchange(client))
+    swap_exchange(RevolutXExchange(client))
     db.add_event(None, "info", m("event.revx_connected"))
     return _exchange_info(lang)
 
@@ -271,7 +279,7 @@ async def delete_credentials(lang: str = Depends(get_lang)) -> dict[str, Any]:
     if engine.live_trading_enabled():
         db.set_setting("live_trading", False)
         db.add_event(None, "info", m("event.live_off_access_removed"))
-    await swap_exchange(UnconfiguredExchange(credentials.missing_reason()))
+    swap_exchange(UnconfiguredExchange(credentials.missing_reason()))
     db.add_event(None, "info", m("event.revx_removed"))
     return _exchange_info(lang)
 
@@ -360,10 +368,15 @@ async def pairs(lang: str = Depends(get_lang)) -> list[str]:
 
 @api.get("/balances")
 async def balances(lang: str = Depends(get_lang)) -> list[dict[str, Any]]:
-    try:
-        data = await engine.exchange.balances()
-    except Exception as exc:  # noqa: BLE001
-        raise fail_with(502, lang, exc) from exc
+    global _balances_cache
+    if _balances_cache and time.monotonic() - _balances_cache[0] < BALANCES_CACHE_SECONDS:
+        data = _balances_cache[1]
+    else:
+        try:
+            data = await engine.exchange.balances()
+        except Exception as exc:  # noqa: BLE001
+            raise fail_with(502, lang, exc) from exc
+        _balances_cache = (time.monotonic(), data)
     return [
         {"currency": c, "available": float(a), "total": float(t)}
         for c, (a, t) in sorted(data.items())
@@ -393,9 +406,11 @@ async def create_bot(body: BotIn, lang: str = Depends(get_lang)) -> dict[str, An
 async def update_bot(bot_id: int, body: BotIn, lang: str = Depends(get_lang)) -> dict[str, Any]:
     bot = _bot_or_404(bot_id, lang)
     symbol, params = await _validate(body, lang)
-    if bot["state"].get("position") and (symbol != bot["symbol"] or body.strategy != bot["strategy"]):
+    # an order in flight is reconciled under the bot's pair – it must not change under it either
+    busy = bot["state"].get("position") or bot["state"].get("pending_order")
+    if busy and (symbol != bot["symbol"] or body.strategy != bot["strategy"]):
         raise fail(409, lang, "api.locked_pair_strategy")
-    if bot["state"].get("position") and body.paper != bot["paper"]:
+    if busy and body.paper != bot["paper"]:
         raise fail(409, lang, "api.locked_mode")
     db.update_bot(
         bot_id, name=body.name.strip(), strategy=body.strategy, symbol=symbol,
@@ -409,7 +424,7 @@ async def update_bot(bot_id: int, body: BotIn, lang: str = Depends(get_lang)) ->
 @api.delete("/bots/{bot_id}", status_code=204, response_class=Response)
 async def delete_bot(bot_id: int, force: bool = False, lang: str = Depends(get_lang)) -> Response:
     bot = _bot_or_404(bot_id, lang)
-    if bot["state"].get("position") and not force:
+    if (bot["state"].get("position") or bot["state"].get("pending_order")) and not force:
         raise fail(409, lang, "api.delete_open_position")
     db.delete_bot(bot_id)
     return Response(status_code=204)

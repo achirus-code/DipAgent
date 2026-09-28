@@ -1,0 +1,81 @@
+# Changelog
+
+All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [1.1.0] – 2026-09-28
+
+Review of the agent with a focus on order execution, stability and load on the exchange API. No changes to
+strategies or to the macOS app.
+
+### Fixed
+
+- **A rejected manual close left a ghost order behind.** `POST /api/bots/{id}/close` (and switching back to paper
+  mode) persisted the pending order before sending it but did not write the state back when the exchange refused
+  it (e.g. insufficient funds). The bot then showed *Waiting for order execution* for three minutes, could not sell
+  or be closed in that time and finally logged a misleading *order not found* event.
+- **A reconciled order kept the bot in error state for five minutes.** When the response to an order got lost, the
+  next tick found and booked the order but the *order unclear* backoff stayed in place: no evaluation (so no
+  stop-loss) for five minutes and an *Error* status although the position was open.
+- **An unreadable response to an order counted as "order not placed".** `ValueError` (which includes JSON decoding
+  errors) was treated like an explicit rejection, so a garbled 2xx response could lead to a second live order. Only
+  an explicit `Problem` or a non-transient 4xx from Revolut X is now treated as "definitely not placed"; everything
+  else is looked up by `client_order_id` before anything is sent again.
+- **Pending orders no longer vanish silently.** An order that cannot be found at the exchange after the grace period
+  (placement response lost, or the exchange no longer knows the order id) stops the bot with an error status and
+  event instead of being discarded – if it was executed after all, buying again would double the position. The same
+  applies to an order id the exchange answers with 404 for.
+- **Bots with an order in flight are protected like bots with a position:** trading pair, strategy and mode cannot be
+  changed and the bot cannot be deleted without `force` while a `pending_order` exists.
+- **Savings plan stuck after enabling live trading.** A DCA bot with an open paper position could neither buy (mode
+  changed) nor sell (no profit target). It now closes the paper position with a simulated sell when the next
+  instalment is due and continues live.
+- **Stale bot state could be written back** when market data for a symbol was missing; the bot is re-read under its
+  lock first.
+- **Strategy parameters reject `NaN` and `Infinity`** (Python's JSON parser accepts them), which would have broken
+  every Decimal comparison in the engine.
+- **Exchange error messages** are parsed robustly when the error body is not a JSON object.
+
+### Changed
+
+- **Transient errors back off for one minute instead of five.** Network errors, 429 and 5xx from Revolut X are
+  distinguished from real problems, so a single hiccup before a buy no longer costs the dip.
+- **Idempotent requests are retried** (GET: three retries with backoff on network errors, 429 and 5xx). Orders are
+  never resent – the existing reconciliation covers them.
+- **Order tracking polls faster first** (0.3 s … 1.5 s, still about 8 s in total) and the global buy lock is released
+  as soon as the pending order is persisted, so other bots are not held up while an order fills.
+- **Exchange swap without dropping the running tick:** after entering or removing Revolut X credentials the old HTTP
+  client is closed once the current tick has finished instead of mid-request.
+- **Graceful shutdown:** the engine task is awaited (up to 10 s), background tasks are cancelled and the database is
+  closed.
+- The status of a stopped-by-reconciliation bot is flagged as an error in the API (`status_error`).
+- API version reported as 1.1.0.
+
+### Performance
+
+- **SQLite:** `synchronous=NORMAL` in WAL mode (no fsync per statement – every tick used to fsync once per bot),
+  `busy_timeout`, and a `created_at` index for the P&L summary. Schema changes are now tracked with
+  `PRAGMA user_version` (migration list in `app/db.py`).
+- **Bot state is only written when it changes;** the last check time is kept in memory and persisted with the next
+  real change.
+- **Market data:** all tickers of a tick are fetched in one request (with a per-symbol fallback), candles are cached
+  across ticks and shared by all bots (re-fetched when a new candle starts or after five minutes), and symbols are
+  fetched concurrently (4 at a time). Stopped bots without a position or order no longer cause market-data requests.
+- **`GET /api/balances` is cached for 10 s** so the app's polling does not turn into an exchange request every time.
+- The pair list keeps the cached copy (retry in five minutes) when a refresh fails instead of failing every order.
+
+### Tests
+
+- 20 new tests (`tests/test_engine_robustness.py`, `tests/test_exchange_setup.py`) covering the fixes above, the
+  candle cache, ticker batching, write-on-change, client retries and the API guards.
+
+### Known limitations
+
+- Fee handling of live orders assumes Revolut X reports `filled_amount` *without* the fee and `total_fee` /
+  `fee_currency` separately. This has not been verified against a real order yet – if `filled_amount` already
+  includes the fee, cost and P&L of live buys are overstated by the fee.
+- A bot stopped because its order could not be found has to be checked and restarted by hand; there is no API to
+  reset a pending order manually.
+
+## [1.0.0]
+
+Initial release.

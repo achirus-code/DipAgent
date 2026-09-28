@@ -33,7 +33,8 @@ The app is available in **English and German** (follows the macOS language, can 
 - **Risk limits:** max. open positions, max. invested capital, only one bot per trading pair.
 - **No duplicate orders:** each bot holds at most one position, orders are persisted with their own
   `client_order_id` *before* they are sent and reconciled after connection drops, every exchange order is booked
-  exactly once, and only one engine may trade per data directory.
+  exactly once, and only one engine may trade per data directory. An order that cannot be found at the exchange
+  for minutes stops the bot instead of being guessed about.
 - **Revolut X setup from the app:** the agent generates the Ed25519 key pair – the private key never leaves the
   agent; the app shows the public key to register with Revolut X and verifies the API key you get back.
 - **Menu bar app:** total and per-bot profit (realized/open/today), trade history, bot activity log, notifications
@@ -59,6 +60,10 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 | **Rebound + trailing stop** | when the price is X % below the high of the last N hours | via a trailing stop once the activation profit is reached; optional stop-loss |
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |
+
+> **Going live with open paper positions:** bots keep simulating an open paper position until it is sold, then buy
+> live. The savings plan is the exception – it closes its paper position (simulated) with the next instalment and
+> continues live, otherwise it could never buy again.
 
 > **Note on the dip buyer:** the 24 h change is a *rolling* window. If the price keeps falling after the buy, the
 > 24 h change can return to 0 % while the position is still at a loss. That's why the bot only sells in this mode

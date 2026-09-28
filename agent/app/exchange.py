@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import time
 import uuid
@@ -13,6 +14,7 @@ from .i18n import Problem
 from .revolutx import RevolutXClient
 
 D0 = Decimal(0)
+log = logging.getLogger("dipagent.exchange")
 
 
 def dec(value: object, default: Decimal = D0) -> Decimal:
@@ -75,6 +77,10 @@ class Exchange:
         return int(time.time() * 1000)
 
     async def ticker(self, symbol: str) -> Ticker: ...
+    async def tickers(self, symbols: list[str]) -> dict[str, Ticker]:
+        """Tickers for several symbols; exchanges that support it fetch them in one request."""
+        return {symbol: await self.ticker(symbol) for symbol in symbols}
+
     async def candles(self, symbol: str, interval: int, since: int, until: int) -> list[Candle]: ...
     async def pairs(self) -> dict[str, PairInfo]: ...
     async def balances(self) -> dict[str, tuple[Decimal, Decimal]]: ...
@@ -112,13 +118,26 @@ class RevolutXExchange(Exchange):
         self._pairs: dict[str, PairInfo] = {}
         self._pairs_at = 0.0
 
+    @staticmethod
+    def _parse_ticker(t: dict) -> Ticker:
+        last = dec(t.get("last_price")) or dec(t.get("mid"))
+        return Ticker(bid=dec(t.get("bid"), last), ask=dec(t.get("ask"), last), last=last)
+
     async def ticker(self, symbol: str) -> Ticker:
         data = await self.client.tickers([symbol])
         if not data:
             raise Problem("err.no_ticker", symbol=symbol)
-        t = data[0]
-        last = dec(t.get("last_price")) or dec(t.get("mid"))
-        return Ticker(bid=dec(t.get("bid"), last), ask=dec(t.get("ask"), last), last=last)
+        return self._parse_ticker(data[0])
+
+    async def tickers(self, symbols: list[str]) -> dict[str, Ticker]:
+        """One request for all symbols; symbols the exchange doesn't return are simply missing."""
+        if not symbols:
+            return {}
+        return {
+            t["symbol"].replace("/", "-"): self._parse_ticker(t)
+            for t in await self.client.tickers(symbols)
+            if t.get("symbol")
+        }
 
     async def candles(self, symbol: str, interval: int, since: int, until: int) -> list[Candle]:
         raw = await self.client.candles(symbol, interval, since, until)
@@ -129,7 +148,14 @@ class RevolutXExchange(Exchange):
 
     async def pairs(self) -> dict[str, PairInfo]:
         if not self._pairs or time.time() - self._pairs_at > 3600:
-            raw = await self.client.pairs()
+            try:
+                raw = await self.client.pairs()
+            except Exception as exc:
+                if not self._pairs:
+                    raise
+                log.warning("Refreshing the pair list failed (%s) – keeping the cached list", exc)
+                self._pairs_at = time.time() - 3600 + 300  # try again in 5 minutes
+                return self._pairs
             self._pairs = {
                 key.replace("/", "-"): PairInfo(
                     symbol=key.replace("/", "-"),

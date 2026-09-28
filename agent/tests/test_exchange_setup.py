@@ -99,3 +99,32 @@ def test_live_trading_switch(api, monkeypatch):
     client.put("/api/live-trading", json={"enabled": True, "confirm": "LIVE"})
     client.delete("/api/exchange/credentials")
     assert client.get("/api/status").json()["live_trading_allowed"] is False
+
+
+def test_bot_changes_are_refused_while_an_order_is_pending(api):
+    client, main, _ = api
+    bot_id = main.db.create_bot("A", "dip", "ETH-EUR", {}, True, False)
+    pending = {"client_order_id": "c", "id": None, "side": "buy", "reason": "x", "placed_at": 0, "quote_size": "50"}
+    main.db.update_bot(bot_id, state={"pending_order": pending})
+    body = {"name": "A", "strategy": "dip", "symbol": "BTC-EUR", "params": {}, "enabled": True, "paper": False}
+    assert client.put(f"/api/bots/{bot_id}", json=body).status_code == 409
+    assert client.delete(f"/api/bots/{bot_id}").status_code == 409
+    body["symbol"] = "ETH-EUR"
+    assert client.put(f"/api/bots/{bot_id}", json=body).status_code == 200  # renaming etc. stays possible
+    assert client.delete(f"/api/bots/{bot_id}", params={"force": "true"}).status_code == 204
+
+
+def test_balances_are_cached_briefly(api, monkeypatch):
+    client, main, _ = api
+    calls = []
+
+    class Counting(main.Exchange):
+        async def balances(self):
+            calls.append(1)
+            return {"EUR": (main.Decimal(1), main.Decimal(1))}
+
+    monkeypatch.setattr(main.engine, "exchange", Counting())
+    monkeypatch.setattr(main, "_balances_cache", None)
+    assert client.get("/api/balances").json()[0]["currency"] == "EUR"
+    client.get("/api/balances")
+    assert len(calls) == 1

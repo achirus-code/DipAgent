@@ -7,8 +7,10 @@ X-Revx-API-Key / X-Revx-Timestamp / X-Revx-Signature headers.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
+import logging
 import time
 import uuid
 from typing import Any
@@ -19,6 +21,10 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 API_PREFIX = "/api/1.0"
+# idempotent GETs are retried on network errors, 429 and 5xx; orders (POST) are never resent
+RETRY_DELAYS = (0.5, 1.0, 2.0)
+
+log = logging.getLogger("dipagent.revolutx")
 
 
 class RevolutXError(Exception):
@@ -26,6 +32,11 @@ class RevolutXError(Exception):
         super().__init__(f"Revolut X {status}: {message}")
         self.status = status
         self.message = message
+
+    @property
+    def transient(self) -> bool:
+        """Rate limit or server-side problem – worth retrying, says nothing about the request itself."""
+        return self.status == 429 or self.status >= 500
 
 
 class RevolutXClient:
@@ -51,6 +62,20 @@ class RevolutXClient:
         params: dict[str, Any] | None = None,
         body: dict[str, Any] | None = None,
     ) -> Any:
+        for attempt, delay in enumerate((*RETRY_DELAYS, None)):
+            try:
+                return await self._request_once(method, path, params, body)
+            except (httpx.TransportError, RevolutXError) as exc:
+                retry = method == "GET" and (isinstance(exc, httpx.TransportError) or exc.transient)
+                if not retry or delay is None:
+                    raise
+                log.warning("%s %s failed (%s) – retry %d in %.1fs", method, path, exc, attempt + 1, delay)
+                await asyncio.sleep(delay)
+        raise AssertionError("unreachable")
+
+    async def _request_once(
+        self, method: str, path: str, params: dict[str, Any] | None, body: dict[str, Any] | None
+    ) -> Any:
         full_path = API_PREFIX + path
         clean = {k: v for k, v in (params or {}).items() if v is not None}
         query = urlencode(clean, safe=",")
@@ -68,10 +93,11 @@ class RevolutXClient:
         resp = await self._http.request(method, url, content=body_str or None, headers=headers)
         if resp.status_code >= 400:
             try:
-                message = resp.json().get("message", resp.text)
+                data = resp.json()
+                message = data.get("message") if isinstance(data, dict) else None
             except ValueError:
-                message = resp.text
-            raise RevolutXError(resp.status_code, message)
+                message = None
+            raise RevolutXError(resp.status_code, message or resp.text or resp.reason_phrase)
         if resp.status_code == 204 or not resp.content:
             return None
         return resp.json()
