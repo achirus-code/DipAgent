@@ -1,0 +1,224 @@
+"""Common building blocks for trading strategies."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import Any
+
+from ..exchange import Candle, Exchange, Ticker, dec
+from ..i18n import L, Problem
+
+CANDLE_INTERVALS = [5, 15, 30, 60, 240, 1440]  # minutes, as supported by Revolut X
+HOUR_MS = 3_600_000
+
+
+@dataclass
+class Option:
+    value: str
+    label: L
+
+
+@dataclass
+class Param:
+    key: str
+    label: L
+    type: str  # number | percent | money | int | bool | select
+    default: Any
+    help: L | None = None
+    min: float | None = None
+    max: float | None = None
+    step: float | None = None
+    options: list[Option] | None = None
+    unit: str | None = None  # display unit for plain numbers, e.g. "h" or "min"
+
+    def coerce(self, value: Any) -> Any:
+        try:
+            if self.type == "bool":
+                v: Any = value if isinstance(value, bool) else str(value).lower() in {"1", "true", "yes"}
+            elif self.type == "int":
+                v = int(float(value))
+            elif self.type == "select":
+                allowed = {o.value for o in self.options or []}
+                v = value if value in allowed else self.default
+            else:
+                v = float(value)
+        except (TypeError, ValueError):
+            return self.default
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            if self.min is not None:
+                v = max(v, type(v)(self.min))
+            if self.max is not None:
+                v = min(v, type(v)(self.max))
+        return v
+
+    def to_json(self, lang: str) -> dict[str, Any]:
+        data: dict[str, Any] = {"key": self.key, "label": self.label(lang), "type": self.type, "default": self.default}
+        if self.help:
+            data["help"] = self.help(lang)
+        for name in ("min", "max", "step", "unit"):
+            if getattr(self, name) is not None:
+                data[name] = getattr(self, name)
+        if self.options:
+            data["options"] = [{"value": o.value, "label": o.label(lang)} for o in self.options]
+        return data
+
+
+@dataclass
+class Position:
+    qty: Decimal
+    cost: Decimal  # total quote currency spent incl. fees
+    opened_at: int
+    peak: Decimal
+    buys: int = 1
+    paper: bool = True  # bought with simulated or real money – sells always use the same mode
+
+    @property
+    def entry_price(self) -> Decimal:
+        return self.cost / self.qty if self.qty else Decimal(0)
+
+    def value(self, price: Decimal) -> Decimal:
+        return self.qty * price
+
+    def pnl_pct(self, price: Decimal) -> float:
+        if not self.cost:
+            return 0.0
+        return float((self.value(price) - self.cost) / self.cost * 100)
+
+    def to_state(self) -> dict[str, Any]:
+        return {
+            "qty": str(self.qty),
+            "cost": str(self.cost),
+            "opened_at": self.opened_at,
+            "peak": str(self.peak),
+            "buys": self.buys,
+            "paper": self.paper,
+        }
+
+    @classmethod
+    def from_state(cls, raw: dict[str, Any] | None) -> "Position | None":
+        if not raw:
+            return None
+        return cls(
+            dec(raw["qty"]), dec(raw["cost"]), int(raw["opened_at"]), dec(raw["peak"]),
+            int(raw.get("buys", 1)), bool(raw.get("paper", True)),
+        )
+
+
+Message = dict  # an i18n message, see app.i18n.m()
+
+
+@dataclass
+class Buy:
+    quote_amount: Decimal
+    reason: Message
+
+
+@dataclass
+class Sell:
+    reason: Message  # always sells the whole position
+
+
+@dataclass
+class Decision:
+    status: Message
+    action: Buy | Sell | None = None
+
+
+class MarketView:
+    """Market data for one symbol during one engine tick (candles fetched lazily and cached)."""
+
+    def __init__(self, exchange: Exchange, symbol: str, ticker: Ticker, now: int):
+        self.exchange = exchange
+        self.symbol = symbol
+        self.ticker = ticker
+        self.now = now
+        self._cache: dict[tuple[int, float], list[Candle]] = {}
+
+    @property
+    def price(self) -> Decimal:
+        return self.ticker.last or self.ticker.mid
+
+    @property
+    def bid(self) -> Decimal:
+        return self.ticker.bid or self.price
+
+    @property
+    def ask(self) -> Decimal:
+        return self.ticker.ask or self.price
+
+    async def candles(self, hours: float) -> tuple[list[Candle], int]:
+        minutes = hours * 60
+        interval = next((i for i in CANDLE_INTERVALS if minutes / i <= 98), CANDLE_INTERVALS[-1])
+        key = (interval, hours)
+        if key not in self._cache:
+            since = self.now - int(hours * HOUR_MS) - interval * 60_000
+            self._cache[key] = await self.exchange.candles(self.symbol, interval, since, self.now)
+        return self._cache[key], interval
+
+    async def price_at(self, hours_ago: float) -> Decimal:
+        candles, interval = await self.candles(hours_ago)
+        if not candles:
+            raise Problem("err.no_ticker", symbol=self.symbol)
+        t0 = self.now - int(hours_ago * HOUR_MS)
+        before = [c for c in candles if c.start <= t0]
+        if not before:
+            return candles[0].open
+        c = before[-1]
+        return c.close if (t0 - c.start) > interval * 30_000 else c.open
+
+    async def change_pct(self, hours: float) -> float:
+        ref = await self.price_at(hours)
+        return float((self.price / ref - 1) * 100) if ref else 0.0
+
+    async def high(self, hours: float) -> Decimal:
+        candles, _ = await self.candles(hours)
+        return max([c.high for c in candles] + [self.price])
+
+    async def low(self, hours: float) -> Decimal:
+        candles, _ = await self.candles(hours)
+        return min([c.low for c in candles] + [self.price])
+
+
+@dataclass
+class Context:
+    params: dict[str, Any]
+    position: Position | None
+    state: dict[str, Any]
+    market: MarketView
+    quote: str = "EUR"
+
+    @property
+    def now(self) -> int:
+        return self.market.now
+
+
+class Strategy:
+    key: str = ""
+    name: L = L("", "")
+    description: L = L("", "")
+    icon: str = "chart.line.uptrend.xyaxis"
+    params: list[Param] = []
+    # False = at most one buy per position; the engine refuses any further buy while a position is open
+    accumulates: bool = False
+
+    def normalize(self, raw: dict[str, Any] | None) -> dict[str, Any]:
+        raw = raw or {}
+        return {p.key: p.coerce(raw.get(p.key, p.default)) for p in self.params}
+
+    async def evaluate(self, ctx: Context) -> Decision:  # pragma: no cover - abstract
+        raise NotImplementedError
+
+    def to_json(self, lang: str) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "name": self.name(lang),
+            "description": self.description(lang),
+            "icon": self.icon,
+            "params": [p.to_json(lang) for p in self.params],
+        }
+
+
+def cooldown_left(ctx: Context, minutes: float) -> int:
+    last_sell = int(ctx.state.get("last_sell_at") or 0)
+    return max(0, last_sell + int(minutes * 60_000) - ctx.now)

@@ -1,0 +1,135 @@
+import AppKit
+import Observation
+import SwiftUI
+
+@main
+struct DipAgentApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    var body: some Scene {
+        // The UI lives in a status-bar panel managed by the AppDelegate.
+        Settings { EmptyView() }
+    }
+}
+
+/// Menu bar icon + panel. The panel closes when the user clicks elsewhere – except while the Revolut X
+/// setup is open (`store.keepPanelOpen`), so the key can be copied into the browser and back.
+/// (SwiftUI's MenuBarExtra can't be kept open, hence the custom panel.)
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let store = AppStore()
+    private var statusItem: NSStatusItem?
+    private var panel: StatusPanel?
+    private var outsideClickMonitor: Any?
+    private var lastAutoClose = Date.distantPast
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        if SnapshotRunner.runIfRequested(store: store) { return }
+
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.target = self
+        item.button?.action = #selector(togglePanel)
+        statusItem = item
+        observeIcon()
+
+        let panel = StatusPanel(rootView: RootView().environment(store))
+        self.panel = panel
+        // clicks into other apps / the desktop …
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            Task { @MainActor in self?.closeUnlessPinned() }
+        }
+        // … and anything else that takes the focus away (other window, Cmd-Tab, …)
+        for (name, object) in [(NSWindow.didResignKeyNotification, panel as Any?), (NSApplication.didResignActiveNotification, nil)] {
+            NotificationCenter.default.addObserver(forName: name, object: object, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.closeUnlessPinned() }
+            }
+        }
+        if ProcessInfo.processInfo.arguments.contains("--show-panel") { // dev aid: open the panel right away
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.showPanel() }
+        }
+    }
+
+    @objc private func togglePanel() {
+        guard let panel else { return }
+        if panel.isVisible {
+            panel.orderOut(nil)
+        } else if Date().timeIntervalSince(lastAutoClose) > 0.3 { // the icon click itself just closed it
+            showPanel()
+        }
+    }
+
+    private func closeUnlessPinned() {
+        guard let panel, panel.isVisible, !store.keepPanelOpen else { return }
+        panel.orderOut(nil)
+        lastAutoClose = Date()
+    }
+
+    /// Opens the panel below the icon, or brings it to the front if it is already open.
+    private func showPanel() {
+        guard let panel, let button = statusItem?.button, let buttonWindow = button.window else { return }
+        if !panel.isVisible {
+            let iconFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+            let screen = (buttonWindow.screen ?? NSScreen.main)?.visibleFrame ?? .zero
+            // The icon must sit in the menu bar (above the visible area); otherwise fall back to the top-right corner
+            let iconIsPlaced = iconFrame.width > 0 && iconFrame.minY >= screen.maxY - 4
+            var x = iconIsPlaced ? iconFrame.midX - panel.frame.width / 2 : screen.maxX
+            x = min(max(x, screen.minX + 8), screen.maxX - panel.frame.width - 8)
+            panel.setFrameOrigin(NSPoint(x: x, y: screen.maxY - panel.frame.height - 6))
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    /// Keeps the menu bar icon in sync with the connection state.
+    private func observeIcon() {
+        withObservationTracking {
+            let image = NSImage(systemSymbolName: store.menuBarSymbol, accessibilityDescription: "DipAgent")
+            image?.isTemplate = true
+            statusItem?.button?.image = image
+        } onChange: {
+            Task { @MainActor [weak self] in self?.observeIcon() }
+        }
+    }
+}
+
+/// Borderless floating panel with the translucent menu look; closing is handled by the AppDelegate.
+final class StatusPanel: NSPanel {
+    init<Content: View>(rootView: Content) {
+        let size = NSSize(width: 400, height: 620)
+        super.init(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        level = .floating
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+
+        let background = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
+        background.material = .popover
+        background.blendingMode = .behindWindow
+        background.state = .active
+        background.maskImage = Self.roundedMask(radius: 14)
+
+        let host = NSHostingView(rootView: rootView)
+        host.frame = background.bounds
+        host.autoresizingMask = [.width, .height]
+        background.addSubview(host)
+        contentView = background
+    }
+
+    override var canBecomeKey: Bool { true } // text fields need keyboard focus
+    override var canBecomeMain: Bool { false }
+
+    private static func roundedMask(radius: CGFloat) -> NSImage {
+        let edge = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
+    }
+}

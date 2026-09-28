@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Agent (Python / Docker)
+agent/.venv/
+agent/.env
+agent/secrets/
+agent/data/
+__pycache__/
+.pytest_cache/
+
+# App (Swift)
+macos/.build/
+macos/build/
+*.xcodeproj/xcuserdata/
+.swiftpm/

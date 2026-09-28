@@ -1,0 +1,518 @@
+"""Bot engine: evaluates every enabled bot periodically and executes its orders.
+
+All texts produced here (statuses, events, trade reasons) are i18n messages (see ``app.i18n``) that are
+rendered in the app's language when they are read.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import fcntl
+import logging
+import uuid
+from collections import defaultdict
+from datetime import datetime
+from decimal import ROUND_DOWN, Decimal
+from typing import Any
+
+from .config import Settings
+from .db import Database, now_ms
+from .exchange import Exchange, OrderResult, PairInfo
+from .i18n import Problem, as_message, m, message_key, money, qty, render
+from .revolutx import RevolutXError
+from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell
+
+log = logging.getLogger("dipagent.engine")
+
+ORDER_POLL_ATTEMPTS = 10
+ORDER_POLL_DELAY = 0.8
+ERROR_BACKOFF_MS = 5 * 60_000
+# an order whose placement response got lost and that can't be found at the exchange after this long is discarded
+ORDER_LOOKUP_GRACE_MS = 3 * 60_000
+
+Message = dict | str
+
+
+def round_down(value: Decimal, step: Decimal) -> Decimal:
+    if step <= 0:
+        return value
+    return (value / step).to_integral_value(rounding=ROUND_DOWN) * step
+
+
+def split_symbol(symbol: str) -> tuple[str, str]:
+    base, _, quote = symbol.partition("-")
+    return base, quote
+
+
+def bot_has_live_position(bot: dict[str, Any] | None) -> bool:
+    position = Position.from_state(bot["state"].get("position")) if bot else None
+    return bool(position and not position.paper)
+
+
+def definitely_not_placed(exc: Exception) -> bool:
+    """True if the exchange clearly refused the order (vs. timeouts/5xx where it may have gone through)."""
+    return isinstance(exc, (ValueError, Problem)) or (isinstance(exc, RevolutXError) and exc.status < 500)
+
+
+class Engine:
+    def __init__(self, db: Database, exchange: Exchange, settings: Settings):
+        self.db = db
+        self.exchange = exchange
+        self.settings = settings
+        self.snapshots: dict[str, dict[str, Any]] = {}
+        self.last_tick: int | None = None
+        self.exchange_error: Message | None = None
+        self.instance_error: Message | None = None
+        self._wake = asyncio.Event()
+        self._locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
+        # serialises "check limits + place buy" across all bots so limits can't be overrun concurrently
+        self._buy_lock = asyncio.Lock()
+        self._instance_lock_file = None
+
+    # --- loop -------------------------------------------------------------
+
+    def _acquire_instance_lock(self) -> bool:
+        """Only one engine may trade per data directory (protects against a 2nd container/worker)."""
+        self._instance_lock_file = open(self.settings.data_dir / "engine.lock", "w")  # noqa: SIM115
+        try:
+            fcntl.flock(self._instance_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except BlockingIOError:
+            self.instance_error = m("engine.instance_locked")
+            log.error(render(self.instance_error, "en"))
+            return False
+
+    async def run(self) -> None:
+        if not self._acquire_instance_lock():
+            return
+        log.info("Engine started (exchange: %s, interval: %ss)", self.exchange.name, self.settings.tick_seconds)
+        while True:
+            try:
+                await self.tick()
+            except Exception:  # noqa: BLE001 - the loop must never die
+                log.exception("Tick failed")
+            try:
+                await asyncio.wait_for(self._wake.wait(), timeout=self.settings.tick_seconds)
+            except asyncio.TimeoutError:
+                pass
+            self._wake.clear()
+
+    def wake(self) -> None:
+        self._wake.set()
+
+    def live_trading_enabled(self) -> bool:
+        """Global switch, off by default; only the app can turn it on (with double confirmation)."""
+        return bool(self.db.get_setting("live_trading", False))
+
+    def is_paper(self, bot: dict[str, Any]) -> bool:
+        """Mode for *new* buys. Open positions keep the mode they were bought with."""
+        return bot["paper"] or not self.live_trading_enabled()
+
+    async def market_view(self, symbol: str) -> MarketView:
+        ticker = await self.exchange.ticker(symbol)
+        view = MarketView(self.exchange, symbol, ticker, self.exchange.now_ms())
+        self.snapshots[symbol] = {
+            "price": float(view.price),
+            "bid": float(view.bid),
+            "ask": float(view.ask),
+            "change_24h": await view.change_pct(24),
+            "updated_at": now_ms(),
+        }
+        return view
+
+    async def tick(self) -> None:
+        bots = self.db.list_bots()
+        views: dict[str, MarketView] = {}
+        errors: dict[str, Message] = {}
+        for symbol in sorted({b["symbol"] for b in bots}):
+            try:
+                views[symbol] = await self.market_view(symbol)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Market data for %s failed: %s", symbol, exc)
+                errors[symbol] = as_message(exc)
+        self.exchange_error = next(iter(errors.values()), None)
+        self.last_tick = now_ms()
+
+        for bot in bots:
+            if not bot["enabled"]:
+                continue
+            view = views.get(bot["symbol"])
+            if view is None:
+                status = m("engine.no_market_data", error=errors.get(bot["symbol"], "?"))
+                self.db.update_bot(bot["id"], status=status, last_check=now_ms())
+                continue
+            await self.process(bot["id"], view)
+
+    # --- per bot ------------------------------------------------------------
+
+    async def process(self, bot_id: int, view: MarketView) -> None:
+        async with self._locks[bot_id]:
+            bot = self.db.get_bot(bot_id)
+            if not bot or not bot["enabled"]:
+                return
+            state = bot["state"]
+            status: Message = bot["status"]
+            try:
+                if state.get("pending_order"):
+                    await self._reconcile(bot, state)
+                    if state.get("pending_order"):
+                        status = m("engine.waiting_for_order")
+                        return
+                if int(state.get("retry_after") or 0) > now_ms():
+                    return
+                status = await self._evaluate(bot, state, view)
+                state.pop("retry_after", None)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Bot %s: %s", bot["name"], exc)
+                self.db.add_event(bot_id, "error", as_message(exc))
+                status = m("engine.error", error=as_message(exc))
+                state["retry_after"] = now_ms() + ERROR_BACKOFF_MS
+            finally:
+                self.db.update_bot(bot_id, state=state, status=status, last_check=now_ms())
+
+    async def _evaluate(self, bot: dict[str, Any], state: dict[str, Any], view: MarketView) -> Message:
+        strategy = STRATEGIES.get(bot["strategy"])
+        if strategy is None:
+            return m("engine.unknown_strategy", strategy=bot["strategy"])
+        position = Position.from_state(state.get("position"))
+        if position and view.price > position.peak:
+            position.peak = view.price
+            state["position"] = position.to_state()
+
+        _, quote = split_symbol(bot["symbol"])
+        ctx = Context(strategy.normalize(bot["params"]), position, state, view, quote)
+        decision = await strategy.evaluate(ctx)
+
+        if isinstance(decision.action, Buy):
+            return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason)
+        if isinstance(decision.action, Sell) and position:
+            return await self._sell(bot, state, view, decision.action.reason)
+        return decision.status
+
+    async def close_position(self, bot_id: int, reason: Message | None = None) -> Message:
+        bot = self.db.get_bot(bot_id)
+        if not bot:
+            raise KeyError(bot_id)
+        view = await self.market_view(bot["symbol"])
+        async with self._locks[bot_id]:
+            bot = self.db.get_bot(bot_id)
+            state = bot["state"]
+            if not state.get("position"):
+                raise Problem("err.no_position")
+            if state.get("pending_order"):
+                raise Problem("err.order_running")
+            status = await self._sell(bot, state, view, reason or m("engine.manual_close"))
+            self.db.update_bot(bot_id, state=state, status=status, last_check=now_ms())
+            return status
+
+    async def close_live_positions(self, reason: Message) -> list[dict[str, Any]]:
+        """Market-sell every open live position (used when switching back to paper mode)."""
+        results = []
+        for bot in self.db.list_bots():
+            if not bot_has_live_position(bot):
+                continue
+            try:
+                message = await self.close_position(bot["id"], reason)
+                ok = not bot_has_live_position(self.db.get_bot(bot["id"]))
+            except Exception as exc:  # noqa: BLE001 – report per bot, keep closing the others
+                message, ok = as_message(exc), False
+                self.db.add_event(bot["id"], "error", m("engine.live_close_failed", error=as_message(exc)))
+            results.append({"bot_id": bot["id"], "bot_name": bot["name"], "ok": ok, "message": message})
+        return results
+
+    # --- limits -------------------------------------------------------------------
+
+    def exposure(self, exclude_bot_id: int | None = None) -> tuple[int, Decimal, set[str]]:
+        """Open positions (incl. buy orders in flight), invested capital and busy symbols of all bots."""
+        count, invested, symbols = 0, Decimal(0), set()
+        for b in self.db.list_bots():
+            if b["id"] == exclude_bot_id:
+                continue
+            position = b["state"].get("position")
+            pending = b["state"].get("pending_order") or {}
+            if position or pending.get("side") == "buy":
+                count += 1
+                symbols.add(b["symbol"])
+                invested += Decimal(position["cost"]) if position else Decimal(pending.get("quote_size") or 0)
+        return count, invested, symbols
+
+    def _limit_violation(self, bot: dict, state: dict, quote_size: Decimal) -> dict | None:
+        limits = self.db.get_limits()
+        count, invested, symbols = self.exposure(exclude_bot_id=bot["id"])
+        position = state.get("position")
+        if not position:  # this buy would open a new position
+            max_positions = int(limits["max_open_positions"])
+            if max_positions > 0 and count >= max_positions:
+                return m("limit.positions", count=count, max=max_positions)
+            if limits["one_position_per_symbol"] and bot["symbol"] in symbols:
+                return m("limit.symbol", symbol=bot["symbol"])
+        max_invested = Decimal(str(limits["max_total_invested"]))
+        own = Decimal(position["cost"]) if position else Decimal(0)
+        if max_invested > 0 and invested + own + quote_size > max_invested:
+            _, quote = split_symbol(bot["symbol"])
+            return m("limit.capital", invested=money(invested + own, quote), max=money(max_invested, quote))
+        return None
+
+    # --- order execution ------------------------------------------------------
+
+    async def _buy(self, bot: dict, state: dict, view: MarketView, amount: Decimal, reason: Message) -> Message:
+        strategy = STRATEGIES[bot["strategy"]]
+        if state.get("pending_order"):
+            return m("engine.order_running_no_buy")
+        if state.get("position") and not strategy.accumulates:
+            return m("engine.position_open_no_buy")
+        open_position = Position.from_state(state.get("position"))
+        if open_position and open_position.paper != self.is_paper(bot):
+            return m("engine.mode_changed_paper" if open_position.paper else "engine.mode_changed_live")
+        pair = await self.exchange.pair(bot["symbol"])
+        quote_size = round_down(amount, pair.quote_step)
+        if quote_size < pair.min_order_size_quote:
+            raise Problem("err.amount_below_min", amount=money(quote_size, pair.quote),
+                          min=money(pair.min_order_size_quote, pair.quote))
+
+        async with self._buy_lock:
+            blocked = self._limit_violation(bot, state, quote_size)
+            if blocked:
+                status = m("engine.buy_skipped", reason=blocked)
+                if render(bot["status"], "en") != render(status, "en"):  # log once, not every tick
+                    self.db.add_event(bot["id"], "info", m("paren", text=status, detail=reason))
+                return status
+
+            if self.is_paper(bot):
+                price = view.ask
+                fee = quote_size * self.settings.taker_fee
+                bought = (quote_size - fee) / price
+                return self._record_buy(bot, state, pair, bought, quote_size, price, fee, None, True, reason)
+
+            balances = await self.exchange.balances()
+            available = balances.get(pair.quote, (Decimal(0), Decimal(0)))[0]
+            if available < quote_size:
+                raise Problem("err.insufficient", currency=pair.quote, available=money(available, pair.quote),
+                              needed=money(quote_size, pair.quote))
+            return await self._place_order(bot, state, pair, "buy", reason, quote_size=quote_size)
+
+    async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message) -> Message:
+        position = Position.from_state(state.get("position"))
+        if position is None:
+            return m("engine.no_position")
+        pair = await self.exchange.pair(bot["symbol"])
+        amount = position.qty
+
+        if position.paper:  # sell the way it was bought – never "simulate" selling real coins
+            price = view.bid
+            gross = amount * price
+            fee = gross * self.settings.taker_fee
+            return self._record_sell(bot, state, pair, amount, gross - fee, price, fee, None, True, reason)
+
+        balances = await self.exchange.balances()
+        available = balances.get(pair.base, (Decimal(0), Decimal(0)))[0]
+        amount = round_down(min(amount, available), pair.base_step)
+        if amount <= 0 or amount < pair.min_order_size:
+            raise Problem("err.sell_below_min", qty=qty(amount), base=pair.base,
+                          min=qty(pair.min_order_size), available=qty(available))
+        return await self._place_order(bot, state, pair, "sell", reason, base_size=amount)
+
+    async def _place_order(
+        self, bot: dict, state: dict, pair: PairInfo, side: str, reason: Message,
+        *, base_size: Decimal | None = None, quote_size: Decimal | None = None,
+    ) -> Message:
+        """Place a market order exactly once.
+
+        The pending order (with our own client_order_id) is persisted *before* it is sent. If the response
+        gets lost, the next tick looks the order up by that id instead of sending a second one.
+        """
+        pending = {
+            "client_order_id": str(uuid.uuid4()),
+            "id": None,
+            "side": side,
+            "reason": reason,
+            "placed_at": now_ms(),
+            "quote_size": str(quote_size) if quote_size is not None else None,
+        }
+        state["pending_order"] = pending
+        self.db.update_bot(bot["id"], state=state)
+        try:
+            pending["id"] = await self.exchange.place_market_order(
+                bot["symbol"], side, client_order_id=pending["client_order_id"],
+                base_size=base_size, quote_size=quote_size,
+            )
+        except Exception as exc:
+            if definitely_not_placed(exc):
+                state.pop("pending_order", None)
+                raise
+            raise Problem("err.order_unclear", error=as_message(exc)) from exc
+        self.db.update_bot(bot["id"], state=state)
+        self.db.add_event(bot["id"], "info", m("engine.order_sent", id=pending["id"], side=m(f"side.{side}")))
+        return await self._track_order(bot, state, pair, pending)
+
+    async def _track_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict) -> Message:
+        for _ in range(ORDER_POLL_ATTEMPTS):
+            await asyncio.sleep(ORDER_POLL_DELAY)
+            result = await self.exchange.get_order(pending["id"])
+            if result.terminal:
+                return self._apply_order(bot, state, pair, pending, result)
+        return m("engine.waiting_for_order")
+
+    async def _reconcile(self, bot: dict, state: dict) -> None:
+        pending = state["pending_order"]
+        pair = await self.exchange.pair(bot["symbol"])
+        if not pending.get("id"):
+            found = await self.exchange.find_order(bot["symbol"], pending["client_order_id"], pending["placed_at"] - 60_000)
+            if found is None:
+                if now_ms() - pending["placed_at"] > ORDER_LOOKUP_GRACE_MS:
+                    state.pop("pending_order", None)
+                    self.db.add_event(bot["id"], "info", m("engine.order_not_found"))
+                return
+            pending["id"] = found.order_id
+            self.db.update_bot(bot["id"], state=state)
+            result = found
+        else:
+            result = await self.exchange.get_order(pending["id"])
+        if result.terminal:
+            self._apply_order(bot, state, pair, pending, result)
+
+    def _apply_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict, r: OrderResult) -> Message:
+        state.pop("pending_order", None)
+        if self.db.trade_exists(r.order_id):  # never book the same exchange order twice
+            return m("engine.order_booked")
+        if r.filled_qty <= 0:
+            msg = (m("engine.order_failed_reason", status=r.status, reason=r.reject_reason) if r.reject_reason
+                   else m("engine.order_failed", status=r.status))
+            self.db.add_event(bot["id"], "error", msg)
+            state["retry_after"] = now_ms() + ERROR_BACKOFF_MS
+            return msg
+        fee_base = r.fee if r.fee_currency == pair.base else Decimal(0)
+        fee_quote = r.fee if r.fee_currency == pair.quote else Decimal(0)
+        fee_in_quote = fee_quote + fee_base * r.avg_price
+        if pending["side"] == "buy":
+            return self._record_buy(
+                bot, state, pair, r.filled_qty - fee_base, r.filled_amount + fee_quote,
+                r.avg_price, fee_in_quote, r.order_id, False, pending["reason"],
+            )
+        return self._record_sell(
+            bot, state, pair, r.filled_qty + fee_base, r.filled_amount - fee_quote,
+            r.avg_price, fee_in_quote, r.order_id, False, pending["reason"],
+        )
+
+    # --- bookkeeping ----------------------------------------------------------
+
+    def _record_buy(self, bot, state, pair, bought, spent, price, fee, order_id, paper, reason) -> Message:
+        position = Position.from_state(state.get("position"))
+        if position:
+            position.qty += bought
+            position.cost += spent
+            position.buys += 1
+            position.peak = max(position.peak, price)
+        else:
+            position = Position(bought, spent, now_ms(), price, paper=paper)
+        state["position"] = position.to_state()
+        state["last_buy_at"] = self.exchange.now_ms()
+        self.db.add_trade(
+            bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="buy",
+            price=str(price), base_qty=str(bought), quote_amount=str(spent), fee=str(fee), pnl=None,
+            order_id=order_id, paper=int(paper), reason=reason,
+        )
+        status = m("engine.bought", qty=qty(bought), base=pair.base, amount=money(spent, pair.quote))
+        self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))
+        return status
+
+    def _record_sell(self, bot, state, pair, sold, proceeds, price, fee, order_id, paper, reason) -> Message:
+        position = Position.from_state(state.get("position"))
+        sold = min(sold, position.qty)
+        cost_part = position.cost * sold / position.qty
+        pnl = proceeds - cost_part
+        position.qty -= sold
+        position.cost -= cost_part
+        if position.qty <= 0 or position.qty < pair.min_order_size:
+            state["position"] = None  # only dust left
+        else:
+            state["position"] = position.to_state()
+        state["last_sell_at"] = self.exchange.now_ms()
+        self.db.add_trade(
+            bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="sell",
+            price=str(price), base_qty=str(sold), quote_amount=str(proceeds), fee=str(fee), pnl=str(pnl),
+            order_id=order_id, paper=int(paper), reason=reason,
+        )
+        status = m("engine.sold", qty=qty(sold), base=pair.base, amount=money(proceeds, pair.quote), pnl=money(pnl, pair.quote))
+        self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))
+        return status
+
+    # --- views for the API ------------------------------------------------------
+
+    def describe_bot(self, bot: dict[str, Any], stats: dict[int, dict[str, Any]], lang: str = "en") -> dict[str, Any]:
+        base, quote = split_symbol(bot["symbol"])
+        strategy = STRATEGIES.get(bot["strategy"])
+        snap = self.snapshots.get(bot["symbol"])
+        s = stats.get(bot["id"], {})
+        position = Position.from_state(bot["state"].get("position"))
+        pos_json = None
+        if position:
+            price = Decimal(str(snap["bid"])) if snap else position.entry_price
+            value = position.value(price)
+            pos_json = {
+                "qty": float(position.qty),
+                "cost": float(position.cost),
+                "entry_price": float(position.entry_price),
+                "opened_at": position.opened_at,
+                "value": float(value),
+                "unrealized_pnl": float(value - position.cost),
+                "unrealized_pct": position.pnl_pct(price),
+                "paper": position.paper,
+            }
+        return {
+            "id": bot["id"],
+            "name": bot["name"],
+            "strategy": bot["strategy"],
+            "strategy_name": strategy.name(lang) if strategy else bot["strategy"],
+            "strategy_icon": strategy.icon if strategy else "questionmark.circle",
+            "symbol": bot["symbol"],
+            "base_currency": base,
+            "quote_currency": quote,
+            "params": strategy.normalize(bot["params"]) if strategy else bot["params"],
+            "enabled": bot["enabled"],
+            "paper": self.is_paper(bot),
+            "paper_requested": bot["paper"],
+            "status": render(bot["status"], lang),
+            "status_error": message_key(bot["status"]) == "engine.error" or str(bot["status"]).startswith("Fehler"),
+            "last_check": bot["last_check"],
+            "created_at": bot["created_at"],
+            "pending_order": bool(bot["state"].get("pending_order")),
+            "position": pos_json,
+            "realized_pnl": float(s.get("realized") or 0),
+            "trades_count": int(s.get("trades") or 0),
+            "wins": int(s.get("wins") or 0),
+            "losses": int(s.get("losses") or 0),
+            "market": {"price": snap["price"], "change_24h": snap["change_24h"]} if snap else None,
+        }
+
+    def summary(self) -> dict[str, Any]:
+        stats = self.db.trade_stats()
+        bots = [self.describe_bot(b, stats) for b in self.db.list_bots()]
+        start_of_day = int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
+        totals: dict[str, dict[str, float]] = {}
+
+        def bucket(currency: str) -> dict[str, float]:
+            return totals.setdefault(currency, {"realized": 0.0, "unrealized": 0.0, "today": 0.0, "invested": 0.0})
+
+        for row in self.db.realized_by_symbol():
+            bucket(split_symbol(row["symbol"])[1])["realized"] += row["pnl"] or 0.0
+        for row in self.db.realized_since(start_of_day):
+            bucket(split_symbol(row["symbol"])[1])["today"] += row["pnl"] or 0.0
+        for b in bots:
+            if b["position"]:
+                t = bucket(b["quote_currency"])
+                t["unrealized"] += b["position"]["unrealized_pnl"]
+                t["invested"] += b["position"]["cost"]
+
+        currencies = [
+            {"currency": c, **v, "total": v["realized"] + v["unrealized"]}
+            for c, v in sorted(totals.items(), key=lambda kv: -abs(kv[1]["realized"]) - kv[1]["invested"])
+        ]
+        return {
+            "currencies": currencies,
+            "bots_total": len(bots),
+            "bots_active": sum(1 for b in bots if b["enabled"]),
+            "open_positions": sum(1 for b in bots if b["position"]),
+            "max_open_positions": int(self.db.get_limits()["max_open_positions"]),
+            "trades_count": sum(b["trades_count"] for b in bots),
+        }

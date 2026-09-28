@@ -1,0 +1,218 @@
+/* German translations. Keys are the English source strings (see scripts/check_localizations.py). */
+
+
+/* APIClient.swift */
+"Invalid agent address" = "Ungültige Agent-Adresse";
+"Invalid token – please check the settings" = "Token ungültig – bitte in den Einstellungen prüfen";
+"Agent error (%@)" = "Fehler vom Agent (%@)";
+
+/* AppStore.swift */
+"%@ buys %@" = "%@ kauft %@";
+"%@ sells %@" = "%@ verkauft %@";
+"%@ %@ at %@" = "%@ %@ zu %@";
+"Result %@" = "Ergebnis %@";
+
+/* Models.swift */
+"Yes" = "Ja";
+"No" = "Nein";
+
+/* BotEditorView.swift */
+"New bot" = "Neuer Bot";
+"Edit bot" = "Bot bearbeiten";
+"Create bot" = "Bot anlegen";
+"Save changes" = "Änderungen speichern";
+"e.g. ETH Dip" = "z. B. ETH Dip";
+"Trading pair" = "Handelspaar";
+"Trading pair and strategy are locked while a position is open." = "Handelspaar und Strategie sind bei offener Position gesperrt.";
+"Strategy" = "Strategie";
+"Rules" = "Regeln";
+"Mode" = "Modus";
+"Paper trading" = "Paper-Trading";
+"Simulated orders with real prices – no real money." = "Simulierte Orders mit echten Kursen – kein echtes Geld.";
+"Attention: this bot trades with real money on Revolut X." = "Achtung: Dieser Bot handelt mit echtem Geld auf Revolut X.";
+"Live trading is off in the settings (Trading mode) – until then the bot trades simulated." = "Der Live-Handel ist in den Einstellungen (Handelsmodus) aus – der Bot handelt bis dahin simuliert.";
+"Bot active" = "Bot aktiv";
+
+/* BotsView.swift */
+"Not connected" = "Nicht verbunden";
+"Connect the app to your agent in the settings." = "Verbinde die App in den Einstellungen mit deinem Agent.";
+"My bots" = "Meine Bots";
+"No bots yet" = "Noch keine Bots";
+"Create your first bot – e.g. a dip buyer for ETH-EUR." = "Lege deinen ersten Bot an – z. B. einen Dip-Käufer für ETH-EUR.";
+"Stop bot" = "Bot stoppen";
+"Start bot" = "Bot starten";
+"Stopped" = "Gestoppt";
+"Waiting for the first check …" = "Wartet auf erste Prüfung …";
+"Open live position" = "Offene Live-Position";
+"Open position" = "Offene Position";
+"%@ %@ · entry %@" = "%@ %@ · Einstieg %@";
+"Edit" = "Bearbeiten";
+"Bot" = "Bot";
+"Bot not found" = "Bot nicht gefunden";
+"The bot has been deleted." = "Der Bot wurde gelöscht.";
+"Stop" = "Stoppen";
+"Start" = "Starten";
+"%@ in 24 h" = "%@ in 24 h";
+"Paper trading is off, but live trading is disabled in the settings – the bot trades simulated." = "Paper-Trading ist aus, aber der Live-Handel ist in den Einstellungen deaktiviert – der Bot handelt simuliert.";
+"Amount" = "Menge";
+"Entry" = "Einstieg";
+"Invested" = "Investiert";
+"Value" = "Wert";
+"Result" = "Ergebnis";
+"Since" = "Seit";
+"Sell position now" = "Position jetzt verkaufen";
+"Really sell at the market price?" = "Wirklich zum Marktpreis verkaufen?";
+"Total" = "Gesamt";
+"Realized" = "Realisiert";
+"Winners" = "Gewinner";
+"Recent trades" = "Letzte Trades";
+"Activity" = "Aktivität";
+"Delete bot" = "Bot löschen";
+"The open position stays in your account – delete anyway?" = "Offene Position bleibt im Konto – trotzdem löschen?";
+"Really delete this bot?" = "Bot wirklich löschen?";
+"Cancel" = "Abbrechen";
+"Confirm" = "Bestätigen";
+
+/* Components.swift */
+"Back" = "Zurück";
+
+/* ExchangeSetupView.swift */
+"Demo mode: the agent uses a simulated market (EXCHANGE=mock)." = "Demo-Modus: Der Agent nutzt einen simulierten Markt (EXCHANGE=mock).";
+"Connect" = "Verbinden";
+"Manage" = "Verwalten";
+"API key" = "API-Key";
+"Set up via" = "Eingerichtet über";
+"the agent's .env" = ".env des Agents";
+"this app" = "diese App";
+"Connected" = "Verbunden";
+"Not set up" = "Nicht eingerichtet";
+"Setup started" = "Einrichtung begonnen";
+"Connection problem" = "Verbindungsproblem";
+"Connect Revolut X" = "Revolut X verbinden";
+"The key pair is generated on your agent – the private key never leaves it. You only register the public key with Revolut X and enter the API key Revolut shows you here." = "Das Schlüsselpaar wird auf deinem Agent erzeugt – der private Schlüssel verlässt ihn nie. Bei Revolut X hinterlegst du nur den öffentlichen Schlüssel und trägst den API-Key, den Revolut dir dafür anzeigt, hier ein.";
+"Active API key" = "Aktiver API-Key";
+"The access is configured in the agent's .env file and can only be changed there." = "Der Zugang ist in der .env-Datei des Agents konfiguriert und kann nur dort geändert werden.";
+"Public key" = "Öffentlicher Schlüssel";
+"Generate key pair" = "Schlüsselpaar erzeugen";
+"New public key" = "Neuer öffentlicher Schlüssel";
+"Public key (active)" = "Öffentlicher Schlüssel (aktiv)";
+"Generate new key pair" = "Neues Schlüsselpaar erzeugen";
+"The current access stays active until a new API key has been saved." = "Der aktuelle Zugang bleibt aktiv, bis ein neuer API-Key gespeichert ist.";
+"The key generated so far will be replaced." = "Der bisher erzeugte Schlüssel wird ersetzt.";
+"Generates an Ed25519 key on the agent, as required by Revolut X." = "Erzeugt auf dem Agent einen Ed25519-Schlüssel, wie Revolut X ihn verlangt.";
+"Register with Revolut X" = "Bei Revolut X hinterlegen";
+"Open Revolut X → API keys" = "Revolut X → API-Keys öffnen";
+"Create a new API key and paste the public key from step 1 – completely, including the BEGIN and END lines." = "Neuen API-Key erstellen und den öffentlichen Schlüssel aus Schritt 1 einfügen – komplett, inklusive der BEGIN- und END-Zeile.";
+"If permissions are requested: allow reading and trading so the bots can place orders." = "Werden Berechtigungen abgefragt: Lesen und Handeln erlauben, damit die Bots Orders platzieren können.";
+"If allowed IP addresses are requested, enter the agent's public IP:" = "Wird nach erlaubten IP-Adressen gefragt, die öffentliche IP des Agents eintragen:";
+"If allowed IP addresses are requested, enter your agent's public IP." = "Wird nach erlaubten IP-Adressen gefragt, die öffentliche IP deines Agents eintragen.";
+"Revolut X then shows a 64-character API key – you need it in step 3." = "Revolut X zeigt danach einen 64-stelligen API-Key an – den brauchst du in Schritt 3.";
+"Enter API key" = "API-Key eintragen";
+"64-character API key from Revolut X" = "64-stelliger API-Key von Revolut X";
+"Connected! The bots now use Revolut X." = "Verbunden! Die Bots nutzen ab sofort Revolut X.";
+"Verify & connect" = "Prüfen & verbinden";
+"The agent checks the key right away by querying your balance and only saves it if Revolut X accepts it." = "Der Agent prüft den Key sofort mit einer Abfrage deines Guthabens und speichert ihn nur, wenn Revolut X ihn akzeptiert.";
+"Remove Revolut X access" = "Revolut-X-Zugang entfernen";
+"Bots can no longer trade afterwards. Really remove?" = "Bots können dann nicht mehr handeln. Wirklich entfernen?";
+"Copied" = "Kopiert";
+"Copy" = "Kopieren";
+
+/* LimitsSection.swift */
+"Risk & limits" = "Risiko & Limits";
+"Max. open positions" = "Max. offene Positionen";
+"How many bots may hold a position at the same time. Currently %@ open." = "Wie viele Bots gleichzeitig eine Position halten dürfen. Aktuell %@ offen.";
+"Max. invested capital" = "Max. investiertes Kapital";
+"Sum of all open positions. 0 = unlimited. Currently %@." = "Summe aller offenen Positionen. 0 = unbegrenzt. Aktuell %@.";
+"Only one bot per trading pair" = "Nur ein Bot pro Handelspaar";
+"Prevents two bots from buying e.g. ETH-EUR at the same time." = "Verhindert, dass zwei Bots gleichzeitig z. B. ETH-EUR kaufen.";
+"Each bot holds at most one position (savings plan: up to “Max. buys”). Orders are never sent twice – not even after connection drops." = "Jeder Bot hält höchstens eine Position (Sparplan: bis „Max. Käufe“). Orders werden nie doppelt gesendet – auch nicht nach Verbindungsabbrüchen.";
+"Discard" = "Verwerfen";
+"Save limits" = "Limits speichern";
+
+/* LiveTradingSection.swift */
+"Trading mode" = "Handelsmodus";
+"Live trading active" = "Live-Handel aktiv";
+"Paper mode (demo)" = "Paper-Modus (Demo)";
+"Real orders with real money on Revolut X" = "Echte Orders mit echtem Geld auf Revolut X";
+"Real prices, orders are only simulated" = "Echte Kurse, Orders werden nur simuliert";
+"Connect Revolut X first – then live trading can be switched on." = "Verbinde zuerst Revolut X – danach lässt sich der Live-Handel einschalten.";
+"When switching back to paper mode, all open live positions are sold immediately." = "Beim Zurückwechseln in den Paper-Modus werden alle offenen Live-Positionen sofort verkauft.";
+"%@ live position(s) could not be sold and are still managed live – sell them manually in the bot view." = "%@ Live-Position(en) konnten nicht verkauft werden und werden weiter live verwaltet – in der Bot-Ansicht manuell verkaufen.";
+"1/2 · Attention: real money" = "1/2 · Achtung: echtes Geld";
+"All bots you create afterwards buy and sell with your real balance on Revolut X." = "Alle Bots, die du danach anlegst, kaufen und verkaufen mit deinem echten Guthaben auf Revolut X.";
+"All existing bots are switched to live as well and then trade with your real balance on Revolut X: %@." = "Alle bestehenden Bots werden ebenfalls live geschaltet und handeln dann mit deinem echten Guthaben auf Revolut X: %@.";
+"If a bot should not trade with real money, you have to delete it first (Manage bots)." = "Soll ein Bot nicht mit echtem Geld handeln, musst du ihn vorher löschen (Bots verwalten).";
+"Open paper positions (%@) are still sold simulated, afterwards the bot buys live." = "Offene Paper-Positionen (%@) werden noch simuliert verkauft, danach kauft der Bot live.";
+"Losses are possible. “Risk & limits” caps open positions and capital." = "Verluste sind möglich. „Risiko & Limits“ begrenzt offene Positionen und Kapital.";
+"I understand that real money is used." = "Ich habe verstanden, dass echtes Geld eingesetzt wird.";
+"Continue" = "Weiter";
+"2/2 · Final confirmation" = "2/2 · Letzte Bestätigung";
+"Enable live trading now? Bots place real orders from the next buy signal on." = "Live-Handel jetzt aktivieren? Bots platzieren ab dem nächsten Kaufsignal echte Orders.";
+"Enable live trading now? Your bot is switched to live and places real orders from the next buy signal on." = "Live-Handel jetzt aktivieren? Dein Bot wird live geschaltet und platziert ab dem nächsten Kaufsignal echte Orders.";
+"Enable live trading now? All %@ bots are switched to live and place real orders from the next buy signal on." = "Live-Handel jetzt aktivieren? Alle %@ Bots werden live geschaltet und platzieren ab dem nächsten Kaufsignal echte Orders.";
+"Yes, enable live trading" = "Ja, Live-Handel aktivieren";
+"Back to paper mode" = "Zurück in den Paper-Modus";
+"No live position is open right now – nothing will be sold." = "Aktuell ist keine Live-Position offen – es wird nichts verkauft.";
+"All open live trades are closed immediately, i.e. sold at the current market price on Revolut X:" = "Alle offenen Live-Trades werden sofort geschlossen, d. h. zum aktuellen Marktpreis auf Revolut X verkauft:";
+"This locks in the result – even if a position is currently at a loss." = "Das Ergebnis steht damit fest – auch wenn eine Position gerade im Minus ist.";
+"Afterwards all bots only trade simulated (paper)." = "Danach handeln alle Bots nur noch simuliert (Paper).";
+"Switch to paper mode" = "Paper-Modus aktivieren";
+"Sell everything & paper mode" = "Alles verkaufen & Paper-Modus";
+"%@ live position(s) sold. All bots now trade in paper mode." = "%@ Live-Position(en) verkauft. Alle Bots handeln jetzt im Paper-Modus.";
+
+/* RootView.swift */
+"Settings" = "Einstellungen";
+"Refresh" = "Aktualisieren";
+"no data" = "keine Daten";
+"Agent connected · Exchange: %@" = "Agent verbunden · Börse: %@";
+"Connected · Demo market" = "Verbunden · Demo-Markt";
+"Connected · Revolut X" = "Verbunden · Revolut X";
+"Connecting …" = "Verbinde …";
+"Total result" = "Gesamtergebnis";
+"Live trading is active – bots trade with real money" = "Live-Handel ist aktiv – Bots handeln mit echtem Geld";
+"PAPER MODE" = "PAPER-MODUS";
+"All orders are only simulated. Live trading: Settings → Trading mode" = "Alle Orders werden nur simuliert. Live-Handel: Einstellungen → Handelsmodus";
+"Open" = "Offen";
+"Today" = "Heute";
+"%@/%@ bots active" = "%@/%@ Bots aktiv";
+"%@ open" = "%@ offen";
+"%@ trades" = "%@ Trades";
+
+/* SettingsView.swift */
+"Manage bots" = "Bots verwalten";
+"Create new bot" = "Neuen Bot anlegen";
+"Balance (demo)" = "Guthaben (Demo)";
+"Balance on Revolut X" = "Guthaben auf Revolut X";
+"(%@ available)" = "(%@ frei)";
+"Notify about new trades" = "Mitteilung bei neuen Trades";
+"Launch at login" = "Bei der Anmeldung starten";
+"Language" = "Sprache";
+"Restart DipAgent to apply the language." = "DipAgent neu starten, um die Sprache zu übernehmen.";
+"Restart" = "Neu starten";
+"Quit" = "Beenden";
+"Disconnect" = "Trennen";
+"Address" = "Adresse";
+"API token" = "API-Token";
+"Hide token" = "Token verbergen";
+"Show token" = "Token anzeigen";
+"Agent version" = "Agent-Version";
+"Exchange" = "Börse";
+"Demo market (simulated)" = "Demo-Markt (simuliert)";
+"Live trading" = "Live-Handel";
+"On" = "Eingeschaltet";
+"Off (paper only)" = "Aus (nur Paper)";
+"Check interval" = "Prüfintervall";
+"every %@ s" = "alle %@ s";
+"Last check" = "Letzte Prüfung";
+"e.g. 192.168.1.10" = "z. B. 192.168.1.10";
+"IP address or host name of the agent. Port %@ is used automatically." = "IP-Adresse oder Hostname des Agents. Port %@ wird automatisch verwendet.";
+"Token" = "Token";
+
+/* TradesView.swift */
+"No trades yet" = "Noch keine Trades";
+"As soon as a bot buys or sells, it shows up here." = "Sobald ein Bot kauft oder verkauft, erscheint es hier.";
+"All bots" = "Alle Bots";
+"Yesterday" = "Gestern";
+"Buy %@" = "Kauf %@";
+"Sell %@" = "Verkauf %@";
+"%@\n%@ · Fee %@" = "%@\n%@ · Gebühr %@";

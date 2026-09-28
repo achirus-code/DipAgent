@@ -1,0 +1,20 @@
+name: dipagent
+
+services:
+  dipagent:
+    build: .
+    container_name: dipagent
+    restart: unless-stopped
+    ports:
+      # 3470 is the DipAgent default port – the app uses it automatically
+      - "3470:3470"
+    env_file:
+      - path: .env
+        required: false   # without .env the defaults apply (token is generated, paper trading)
+    volumes:
+      - dipagent-data:/data
+      # optional: Revolut X private key (revx_private.pem) when configured via .env instead of the app
+      - ./secrets:/secrets:ro
+
+volumes:
+  dipagent-data:
