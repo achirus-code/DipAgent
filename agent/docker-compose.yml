@@ -2,6 +2,8 @@ name: dipagent
 
 services:
   dipagent:
+    # released image (amd64 + arm64); `docker compose up -d --build` builds it from this directory instead
+    image: ghcr.io/achirus-code/dipagent:latest
     build: .
     container_name: dipagent
     restart: unless-stopped

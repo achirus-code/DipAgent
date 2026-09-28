@@ -1,0 +1,34 @@
+# Home Assistant add-on for the DipAgent agent.
+# The add-on uses the very same image Docker users pull; there is no separate Dockerfile here.
+# `version:` and CHANGELOG.md are written by scripts/sync-addon.py from agent/app/main.py – do not edit by hand.
+name: DipAgent
+version: "1.1.0"
+slug: dipagent
+description: Trading bots for Revolut X, controlled from the DipAgent macOS menu bar app
+url: https://github.com/achirus-code/DipAgent
+image: ghcr.io/achirus-code/dipagent
+arch:
+  - amd64
+  - aarch64
+startup: services
+boot: auto
+init: true
+# stop the agent for the few seconds of a backup so the SQLite database is copied consistently
+backup: cold
+watchdog: "http://[HOST]:[PORT:3470]/api/health"
+ports:
+  3470/tcp: 3470
+ports_description:
+  3470/tcp: REST API used by the DipAgent macOS app
+options:
+  api_token: ""
+  exchange: revolutx
+  tick_seconds: 30
+  taker_fee: 0.0009
+  mock_speed: 1
+schema:
+  api_token: password?
+  exchange: list(revolutx|mock)
+  tick_seconds: int(5,3600)
+  taker_fee: float(0,0.1)
+  mock_speed: float(0.1,)

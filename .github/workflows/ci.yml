@@ -27,12 +27,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
+      # same platforms as the release build, so an arm64 breakage shows up before a tag is pushed
       - uses: docker/build-push-action@v6
         with:
           context: agent
+          platforms: linux/amd64,linux/arm64
           push: false
+          build-args: BUILD_VERSION=ci
           tags: dipagent-agent:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  addon:
+    name: Home Assistant add-on
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add-on version and changelog match the agent
+        run: python3 scripts/sync-addon.py --check
+      - name: Only the add-on has a config.yaml (the Supervisor scans the whole repository)
+        run: |
+          extra=$(git ls-files | grep -E '(^|/)config\.(ya?ml|json)$' | grep -v '^homeassistant/dipagent/config.yaml$' || true)
+          if [ -n "$extra" ]; then echo "unexpected add-on config files:"; echo "$extra"; exit 1; fi
 
   app:
     name: macOS app

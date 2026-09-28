@@ -1,0 +1,18 @@
+configuration:
+  api_token:
+    name: API token
+    description: Token the macOS app uses to log in. Leave empty and the agent generates one on first start (shown in the add-on log).
+  exchange:
+    name: Exchange
+    description: revolutx = real exchange, mock = simulated market for trying things out.
+  tick_seconds:
+    name: Check interval (seconds)
+    description: How often the bots check the market.
+  taker_fee:
+    name: Taker fee
+    description: Fee used for simulated (paper) trades, 0.0009 = 0.09 %.
+  mock_speed:
+    name: Simulation speed
+    description: Only for exchange = mock. 60 = one market hour per real minute.
+network:
+  3470/tcp: Port for the DipAgent macOS app
