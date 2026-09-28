@@ -237,6 +237,21 @@ CATALOG: dict[str, L] = {
     ),
     "trailing.active": L("Trailing active · stop {stop} · {profit}", "Trailing aktiv · Stop {stop} · {profit}"),
     "trailing.position": L("Position {profit} · trailing from {activation}", "Position {profit} · Trailing ab {activation}"),
+    # --- AI decides
+    "ai.reason": L("{en}", "{de}"),
+    "ai.trade_reason": L("Claude ({confidence} % confident): {reason}", "Claude ({confidence} % sicher): {reason}"),
+    "ai.no_key": L(
+        "No Anthropic API key on the agent (ANTHROPIC_API_KEY) – the bot cannot decide",
+        "Kein Anthropic-API-Key auf dem Agenten (ANTHROPIC_API_KEY) – der Bot kann nicht entscheiden",
+    ),
+    "ai.auth_error": L("Anthropic API key rejected – checking again in 1 h", "Anthropic-API-Key abgelehnt – neuer Versuch in 1 h"),
+    "ai.rate_limited": L("Anthropic rate limit – asking again in {left}", "Anthropic-Ratenlimit – neue Anfrage in {left}"),
+    "ai.error": L("Claude not reachable ({error}) – asking again in {left}", "Claude nicht erreichbar ({error}) – neue Anfrage in {left}"),
+    "ai.retry": L("Waiting {left} before asking Claude again", "Warte {left}, bevor Claude erneut gefragt wird"),
+    "ai.buy": L("Claude buys: {reason}", "Claude kauft: {reason}"),
+    "ai.sell": L("Claude sells: {reason}", "Claude verkauft: {reason}"),
+    "ai.waiting": L("Claude waits: {reason} · next check in {left}", "Claude wartet: {reason} · nächste Prüfung in {left}"),
+    "ai.holding": L("Claude holds ({profit}): {reason} · next check in {left}", "Claude hält ({profit}): {reason} · nächste Prüfung in {left}"),
     # --- engine
     "engine.instance_locked": L(
         "Another DipAgent engine is already running with this data directory – this instance does not trade.",

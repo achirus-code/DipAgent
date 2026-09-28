@@ -14,5 +14,8 @@ configuration:
   mock_speed:
     name: Simulationsgeschwindigkeit
     description: Nur für Börse = mock. 60 = eine Marktstunde pro echter Minute.
+  anthropic_api_key:
+    name: Anthropic-API-Key
+    description: Nur für die Strategie „KI entscheidet“ – Claude entscheidet, wann gekauft und verkauft wird. Key unter console.anthropic.com; jede Prüfung kostet ein paar Cent.
 network:
   3470/tcp: Port für die DipAgent-macOS-App

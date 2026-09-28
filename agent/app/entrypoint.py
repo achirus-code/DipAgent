@@ -26,6 +26,7 @@ OPTION_ENV = {
     "tick_seconds": "TICK_SECONDS",
     "taker_fee": "TAKER_FEE",
     "mock_speed": "MOCK_SPEED",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
 }
 
 UVICORN = ["-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(PORT), "--proxy-headers"]

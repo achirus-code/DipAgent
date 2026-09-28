@@ -14,5 +14,8 @@ configuration:
   mock_speed:
     name: Simulation speed
     description: Only for exchange = mock. 60 = one market hour per real minute.
+  anthropic_api_key:
+    name: Anthropic API key
+    description: Only for the "AI decides" strategy – Claude decides when to buy and sell. Get a key at console.anthropic.com; every check costs a few cents.
 network:
   3470/tcp: Port for the DipAgent macOS app

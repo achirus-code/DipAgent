@@ -1,10 +1,11 @@
 from ..i18n import register
 from .base import Buy, Context, Decision, MarketView, Param, Position, Sell, Strategy
+from .ai import AiStrategy
 from .dip import DipStrategy
 from .others import DcaStrategy, PriceZoneStrategy, ReboundTrailingStrategy
 
 STRATEGIES: dict[str, Strategy] = {
-    s.key: s for s in (DipStrategy(), ReboundTrailingStrategy(), PriceZoneStrategy(), DcaStrategy())
+    s.key: s for s in (DipStrategy(), ReboundTrailingStrategy(), PriceZoneStrategy(), DcaStrategy(), AiStrategy())
 }
 
 # strategy names can be used as message arguments, e.g. m("event.bot_created", strategy=m("strategy.dip"))

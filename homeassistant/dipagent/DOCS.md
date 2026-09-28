@@ -25,6 +25,7 @@ UI, only the REST API the app talks to (port 3470).
 | `tick_seconds` | `30` | How often the bots check the market. |
 | `taker_fee` | `0.0009` | Fee used for simulated (paper) trades. |
 | `mock_speed` | `1` | Only for `exchange: mock` – time lapse (60 = one market hour per minute). |
+| `anthropic_api_key` | – | Only for the *AI decides* strategy: Claude decides when to buy and sell. Key from console.anthropic.com; every check costs a few cents. |
 
 Live trading, risk limits and bots are managed in the app and stored in the add-on data, not in the options.
 The time zone for the "today" P&L summary follows your Home Assistant time zone.

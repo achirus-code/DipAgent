@@ -149,6 +149,88 @@ async def test_trailing_stop_never_below_break_even():
     assert d.action is None and "Trailing active" in render(d.status, "en")
 
 
+@pytest.mark.asyncio
+async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, monkeypatch):
+    from app.strategies.ai import AiDecision, AiStrategy
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    strategy = STRATEGIES["ai"]
+    assert isinstance(strategy, AiStrategy)
+    answers: list[str] = []
+    briefs = []
+
+    async def fake_ask(brief, news):
+        briefs.append(brief)
+        return AiDecision(action=answers.pop(0), confidence=80, reason_en="test", reason_de="Test")
+
+    monkeypatch.setattr(strategy, "ask", fake_ask)
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 30}, True, True)
+
+    answers.append("wait")
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"].get("position") is None
+    assert briefs[-1].position is None and "24h" in briefs[-1].changes
+    # within the interval Claude is not asked again – the last answer is repeated
+    await engine.tick()
+    assert len(briefs) == 1 and "Claude waits" in render(db.get_bot(bot_id)["status"], "en")
+
+    ex.now += 31 * 60_000
+    answers.append("buy")
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"], db.get_bot(bot_id)["status"]
+    assert briefs[-1].position is None
+
+    ex.now += 31 * 60_000
+    ex.price = Decimal("2030")
+    answers.append("hold")
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"] and briefs[-1].position["profit_pct"] > 0
+    assert "Claude holds" in render(db.get_bot(bot_id)["status"], "en")
+
+    ex.now += 31 * 60_000
+    answers.append("sell")
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"].get("position") is None
+    trades = db.list_trades(bot_id)
+    assert [t["side"] for t in trades] == ["sell", "buy"] and "Claude (80 %" in render(trades[0]["reason"], "en")
+
+
+@pytest.mark.asyncio
+async def test_ai_strategy_without_key_does_nothing(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    db, engine = make_engine(tmp_path, FakeExchange("2000", "1970"))
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50}, True, True)
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert bot["state"].get("position") is None and "ANTHROPIC_API_KEY" in render(bot["status"], "en")
+
+
+@pytest.mark.asyncio
+async def test_ai_sell_at_a_loss_is_held_back(tmp_path: Path, monkeypatch):
+    from app.strategies.ai import AiDecision
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    answers = ["buy", "sell"]
+
+    async def fake_ask(brief, news):
+        return AiDecision(action=answers.pop(0), confidence=90, reason_en="x", reason_de="x")
+
+    monkeypatch.setattr(STRATEGIES["ai"], "ask", fake_ask)
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 5}, True, True)
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"]
+    ex.now += 6 * 60_000
+    ex.price = Decimal("1950")  # under water: Claude's "sell" must not go through
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["position"] and "never sells at a loss" in render(bot["status"], "en")
+
+
 def test_min_profit_cannot_be_negative():
     assert STRATEGIES["dip"].normalize({"min_profit": -1})["min_profit"] == 0
 

@@ -164,6 +164,13 @@ struct BotEditorView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)
             }
+            if strategyKey == "ai", store.status?.aiConfigured == false {
+                Label("The agent has no Anthropic API key yet – set ANTHROPIC_API_KEY in agent/.env or the add-on option “Anthropic API key”. Until then this bot only waits.", systemImage: "key.fill")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+            }
         }
     }
 

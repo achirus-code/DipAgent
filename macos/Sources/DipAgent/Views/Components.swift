@@ -215,6 +215,7 @@ func strategyColors(_ key: String) -> [Color] {
     case "trailing": return [Color(red: 0.1, green: 0.75, blue: 0.6), Color(red: 0.1, green: 0.5, blue: 0.85)]
     case "zones": return [Color(red: 1.0, green: 0.6, blue: 0.2), Color(red: 0.95, green: 0.35, blue: 0.4)]
     case "dca": return [Color(red: 0.75, green: 0.4, blue: 0.95), Color(red: 0.95, green: 0.35, blue: 0.65)]
+    case "ai": return [Color(red: 0.95, green: 0.55, blue: 0.15), Color(red: 0.9, green: 0.25, blue: 0.5)]
     default: return [.gray, .secondary]
     }
 }

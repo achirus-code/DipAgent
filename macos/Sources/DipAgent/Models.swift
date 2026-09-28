@@ -58,6 +58,8 @@ struct ServerStatus: Codable {
     let tickSeconds: Int
     /// Exchange fee per order as a fraction (0.0009 = 0.09 %); older agents don't send it.
     let takerFee: Double?
+    /// Whether the agent has an Anthropic API key for the "AI decides" strategy (nil: older agent).
+    let aiConfigured: Bool?
 
     enum CodingKeys: String, CodingKey {
         case version, exchange
@@ -68,6 +70,7 @@ struct ServerStatus: Codable {
         case lastTick = "last_tick"
         case tickSeconds = "tick_seconds"
         case takerFee = "taker_fee"
+        case aiConfigured = "ai_configured"
     }
 }
 
