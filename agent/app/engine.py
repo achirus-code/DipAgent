@@ -897,32 +897,45 @@ class Engine:
         stats = self.db.trade_stats()
         bots = [self.describe_bot(b, stats) for b in self.db.list_bots()]
         start_of_day = int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
-        totals: dict[str, dict[str, float]] = {}
+        # Paper and live results are kept apart: the card shows the active mode, the other one is a footnote
+        paper_mode = not self.live_trading_enabled()
 
-        def bucket(currency: str) -> dict[str, float]:
-            return totals.setdefault(currency, {"realized": 0.0, "unrealized": 0.0, "today": 0.0, "invested": 0.0, "fees": 0.0})
+        def totals_for(paper: bool) -> dict[str, dict[str, float]]:
+            totals: dict[str, dict[str, float]] = {}
 
-        for row in self.db.realized_by_symbol():
-            bucket(split_symbol(row["symbol"])[1])["realized"] += row["pnl"] or 0.0
-        for row in self.db.fees_by_symbol():
-            bucket(split_symbol(row["symbol"])[1])["fees"] += row["fee"] or 0.0
-        for row in self.db.realized_since(start_of_day):
-            bucket(split_symbol(row["symbol"])[1])["today"] += row["pnl"] or 0.0
-        for b in bots:
-            if b["position"]:
-                t = bucket(b["quote_currency"])
-                t["unrealized"] += b["position"]["unrealized_pnl"]
-                t["invested"] += b["position"]["cost"]
+            def bucket(currency: str) -> dict[str, float]:
+                return totals.setdefault(currency, {"realized": 0.0, "unrealized": 0.0, "today": 0.0, "invested": 0.0, "fees": 0.0})
 
+            for row in self.db.realized_by_symbol(paper):
+                bucket(split_symbol(row["symbol"])[1])["realized"] += row["pnl"] or 0.0
+            for row in self.db.fees_by_symbol(paper):
+                bucket(split_symbol(row["symbol"])[1])["fees"] += row["fee"] or 0.0
+            for row in self.db.realized_since(start_of_day, paper):
+                bucket(split_symbol(row["symbol"])[1])["today"] += row["pnl"] or 0.0
+            for b in bots:
+                if b["position"] and b["position"]["paper"] == paper:
+                    t = bucket(b["quote_currency"])
+                    t["unrealized"] += b["position"]["unrealized_pnl"]
+                    t["invested"] += b["position"]["cost"]
+            return totals
+
+        active, other = totals_for(paper_mode), totals_for(not paper_mode)
         currencies = [
             {"currency": c, **v, "total": v["realized"] + v["unrealized"]}
-            for c, v in sorted(totals.items(), key=lambda kv: -abs(kv[1]["realized"]) - kv[1]["invested"])
+            for c, v in sorted(active.items(), key=lambda kv: -abs(kv[1]["realized"]) - kv[1]["invested"])
         ]
         return {
+            "mode": "paper" if paper_mode else "live",
             "currencies": currencies,
+            # the other mode's result per currency – only where something was traded or is open
+            "other_mode": [
+                {"currency": c, "total": v["realized"] + v["unrealized"], "realized": v["realized"], "unrealized": v["unrealized"]}
+                for c, v in other.items()
+            ],
+            "other_mode_trades": self.db.trades_count(not paper_mode),
             "bots_total": len(bots),
             "bots_active": sum(1 for b in bots if b["enabled"]),
             "open_positions": sum(1 for b in bots if b["position"]),
             "max_open_positions": int(self.db.get_limits()["max_open_positions"]),
-            "trades_count": sum(b["trades_count"] for b in bots),
+            "trades_count": self.db.trades_count(paper_mode),
         }

@@ -255,21 +255,29 @@ class Database:
         )
         return {r["bot_id"]: r for r in rows}
 
-    def realized_since(self, since_ms: int) -> list[dict[str, Any]]:
+    def realized_since(self, since_ms: int, paper: bool | None = None) -> list[dict[str, Any]]:
         return self._all(
             "SELECT symbol, SUM(CAST(pnl AS REAL)) AS pnl FROM trades "
-            "WHERE pnl IS NOT NULL AND created_at >= ? GROUP BY symbol",
+            f"WHERE pnl IS NOT NULL AND created_at >= ? {self._mode(paper)} GROUP BY symbol",
             (since_ms,),
         )
 
-    def realized_by_symbol(self) -> list[dict[str, Any]]:
+    def realized_by_symbol(self, paper: bool | None = None) -> list[dict[str, Any]]:
         return self._all(
-            "SELECT symbol, SUM(CAST(pnl AS REAL)) AS pnl FROM trades WHERE pnl IS NOT NULL GROUP BY symbol"
+            f"SELECT symbol, SUM(CAST(pnl AS REAL)) AS pnl FROM trades WHERE pnl IS NOT NULL {self._mode(paper)} GROUP BY symbol"
         )
 
-    def fees_by_symbol(self) -> list[dict[str, Any]]:
+    def fees_by_symbol(self, paper: bool | None = None) -> list[dict[str, Any]]:
         """Exchange fees paid so far (buys and sells), in the quote currency."""
-        return self._all("SELECT symbol, SUM(CAST(fee AS REAL)) AS fee FROM trades GROUP BY symbol")
+        return self._all(f"SELECT symbol, SUM(CAST(fee AS REAL)) AS fee FROM trades WHERE 1=1 {self._mode(paper)} GROUP BY symbol")
+
+    def trades_count(self, paper: bool | None = None) -> int:
+        return int(self._one(f"SELECT COUNT(*) AS n FROM trades WHERE 1=1 {self._mode(paper)}")["n"])
+
+    @staticmethod
+    def _mode(paper: bool | None) -> str:
+        """SQL filter for simulated (paper) or real trades – None means both."""
+        return "" if paper is None else f"AND paper = {1 if paper else 0}"
 
     # --- Events -----------------------------------------------------------
 

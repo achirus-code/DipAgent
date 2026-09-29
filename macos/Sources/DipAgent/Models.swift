@@ -86,8 +86,18 @@ struct CurrencyTotal: Codable, Identifiable {
     var id: String { currency }
 }
 
+struct OtherModeTotal: Codable {
+    let currency: String
+    let total: Double
+}
+
 struct Summary: Codable {
     let currencies: [CurrencyTotal]
+    /// "paper" or "live" – the mode the numbers above belong to (older agents mix both and send nothing).
+    let mode: String?
+    /// The other mode's result per currency, and how many trades it has.
+    let otherMode: [OtherModeTotal]?
+    let otherModeTrades: Int?
     let botsTotal: Int
     let botsActive: Int
     let openPositions: Int
@@ -95,7 +105,9 @@ struct Summary: Codable {
     let tradesCount: Int
 
     enum CodingKeys: String, CodingKey {
-        case currencies
+        case currencies, mode
+        case otherMode = "other_mode"
+        case otherModeTrades = "other_mode_trades"
         case botsTotal = "bots_total"
         case botsActive = "bots_active"
         case openPositions = "open_positions"

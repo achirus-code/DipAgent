@@ -717,6 +717,22 @@ async def test_no_paper_buy_into_live_position(tmp_path: Path):
     assert len(db.list_trades(bot_id)) == 1
 
 
+async def test_summary_separates_paper_and_live(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    db.set_limits({"max_open_positions": 0, "one_position_per_symbol": False})
+    db.create_bot("Live", "dip", "ETH-EUR", {}, True, False)
+    db.create_bot("Paper", "dip", "BTC-EUR", {}, True, True)
+    await engine.tick()
+    s = engine.summary()
+    assert s["mode"] == "live" and s["trades_count"] == 1
+    assert [c["currency"] for c in s["currencies"]] == ["EUR"] and s["currencies"][0]["invested"] > 0
+    assert s["other_mode_trades"] == 1 and s["other_mode"][0]["currency"] == "EUR"
+    db.set_setting("live_trading", False)  # back to paper: the paper numbers move to the front
+    s = engine.summary()
+    assert s["mode"] == "paper" and s["trades_count"] == 1 and s["other_mode_trades"] == 1
+
+
 async def test_switching_to_paper_sells_all_live_positions(tmp_path: Path):
     ex = FakeExchange("2000", "1970")
     db, engine = make_engine(tmp_path, ex, live=True)

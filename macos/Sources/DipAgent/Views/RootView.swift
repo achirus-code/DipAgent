@@ -227,7 +227,8 @@ struct SummaryCard: View {
         let currency = result?.currency ?? cash.first?.currency ?? "EUR"
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Total result").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                Text(summary.mode == "live" ? "Total result (live)" : summary.mode == "paper" ? "Total result (paper)" : "Total result")
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 Spacer()
                 if liveAllowed {
                     Badge(text: "LIVE", color: .green, icon: "bolt.fill")
@@ -301,6 +302,14 @@ struct SummaryCard: View {
             .foregroundStyle(.secondary)
             .labelStyle(CompactLabelStyle())
 
+            // Paper and live are kept apart: the other mode's result is only a footnote
+            if let mode = summary.mode, let other = summary.otherMode?.first(where: { $0.currency == currency }),
+               (summary.otherModeTrades ?? 0) > 0 || abs(other.total) >= 0.005 {
+                Text(mode == "live" ? "Paper result: \(Fmt.money(other.total, currency, signed: true))"
+                                     : "Live result: \(Fmt.money(other.total, currency, signed: true))")
+                    .font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
+                    .help("Result of the other trading mode – not part of the numbers above.")
+            }
             // The exchange balance is not DipAgent's result – just a footnote
             if let balance = cash.first(where: { $0.currency == currency }) {
                 let positions = positionsValue(currency)
