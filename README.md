@@ -4,6 +4,8 @@
 
 **Trading bots for [Revolut X](https://exchange.revolut.com) that run 24/7 in Docker – controlled from a tiny macOS menu bar app.**
 
+Website: <https://achirus-code.github.io/DipAgent/> (source in [`docs/`](docs/), served by GitHub Pages)
+
 DipAgent consists of two parts:
 
 - **Agent** (`agent/`) – a small Python service in a Docker container. It checks the market around the clock, runs
