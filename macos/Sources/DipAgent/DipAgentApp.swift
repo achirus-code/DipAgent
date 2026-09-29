@@ -157,9 +157,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard spinner == nil else { return }
             spinAngle = 0
             statusItem?.button?.image = Self.icon(symbol)
-            spinner = Timer.scheduledTimer(withTimeInterval: 1.0 / 12, repeats: true) { [weak self] _ in
+            spinner = Timer.scheduledTimer(withTimeInterval: 1.0 / 12, repeats: true) { [weak self] timer in
                 Task { @MainActor [weak self] in
-                    guard let self else { return }
+                    // a frame scheduled just before the spinner was stopped must not overwrite the final icon
+                    guard let self, self.spinner === timer else { return }
                     self.spinAngle = (self.spinAngle + 30).truncatingRemainder(dividingBy: 360)
                     self.statusItem?.button?.image = Self.icon(symbol, rotatedBy: self.spinAngle)
                 }
