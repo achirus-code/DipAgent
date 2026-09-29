@@ -10,6 +10,8 @@
 "%@ buys %@" = "%@ kauft %@";
 "%@: buy blocked" = "%@: Kauf blockiert";
 "Ask Claude now – a fresh decision right away (costs one check)" = "Claude jetzt fragen – sofort eine neue Bewertung (kostet eine Prüfung)";
+"Ask Claude for a fresh decision now? This costs one extra check." = "Claude jetzt um eine neue Bewertung bitten? Das kostet eine zusätzliche Prüfung.";
+"Ask Claude" = "Claude fragen";
 "%@ sells %@" = "%@ verkauft %@";
 "%@ %@ at %@" = "%@ %@ zu %@";
 "Result %@" = "Ergebnis %@";

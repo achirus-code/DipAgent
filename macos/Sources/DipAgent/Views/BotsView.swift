@@ -147,6 +147,7 @@ struct BotCard: View {
     @State private var hovering = false
     @State private var confirmingDelete = false
     @State private var asking = false
+    @State private var confirmingAsk = false
     @State private var error: String?
 
     var body: some View {
@@ -197,11 +198,7 @@ struct BotCard: View {
                             Spacer(minLength: 0)
                             // a fresh decision right now – one extra Claude call
                             Button {
-                                asking = true; error = nil
-                                Task {
-                                    do { try await store.askClaude(bot) } catch { self.error = error.localizedDescription }
-                                    asking = false
-                                }
+                                withAnimation { confirmingAsk = true; confirmingDelete = false; error = nil }
                             } label: {
                                 Group {
                                     if asking {
@@ -212,11 +209,11 @@ struct BotCard: View {
                                     }
                                 }
                                 .frame(width: 22, height: 22)
-                                .background(Circle().fill(Color.primary.opacity(0.08)))
-                                .foregroundStyle(.secondary)
+                                .background(Circle().fill(Color.accentColor.opacity(0.12)))
+                                .foregroundStyle(Color.accentColor)
                             }
                             .buttonStyle(.plain)
-                            .disabled(asking || bot.pendingOrder)
+                            .disabled(asking || confirmingAsk || bot.pendingOrder)
                             .help("Ask Claude now – a fresh decision right away (costs one check)")
                             Button { open(.bot(bot.id)) } label: {
                                 Label("Decisions", systemImage: "sparkles")
@@ -238,6 +235,9 @@ struct BotCard: View {
 
                 if confirmingDelete {
                     deleteConfirmation
+                }
+                if confirmingAsk {
+                    askConfirmation
                 }
                 if let error {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -270,6 +270,30 @@ struct BotCard: View {
     }
 
     /// Inline confirmation (alerts are unreliable inside menu bar panels) – the same wording as in the bot view.
+    /// Every extra check costs money – ask before calling Claude.
+    private var askConfirmation: some View {
+        VStack(spacing: 6) {
+            Text("Ask Claude for a fresh decision now? This costs one extra check.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Cancel") { withAnimation { confirmingAsk = false } }
+                    .buttonStyle(.bordered)
+                Button("Ask Claude") {
+                    withAnimation { confirmingAsk = false }
+                    asking = true
+                    Task {
+                        do { try await store.askClaude(bot) } catch { self.error = error.localizedDescription }
+                        asking = false
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var deleteConfirmation: some View {
         VStack(spacing: 6) {
             Text(bot.position != nil ? "The open position stays in your account – delete anyway?" : "Really delete this bot?")
