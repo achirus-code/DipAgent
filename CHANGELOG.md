@@ -2,6 +2,24 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.0] – 2026-09-29
+
+### Added
+
+- **Discard position (no sale).** In the bot view next to *Sell position now*: removes a position from the
+  agent's books without placing an order (`POST /api/bots/{id}/discard`). For a position that is wrong in the
+  books – e.g. booked from a short-reported fill – while the coins stay, or don't exist, on the exchange.
+
+### Changed
+
+- **Fewer requests to Revolut X**, without touching how orders are tracked: candle series are reused until the
+  next candle starts instead of being re-fetched every 5 minutes; balances are cached for a minute in the
+  exchange wrapper (shared by the app, the holdings check and the checks before buys and sells) and dropped
+  after every own order; the app only fetches balances while the panel is open; the holdings check runs every
+  30 minutes (plus right after every own fill); the *AI decides* brief is built from two candle series instead
+  of four; the first read of a new order happens a second after placing it. Roughly halves the daily request
+  count with the default settings. Trades the user makes directly on Revolut X are, as before, not tracked.
+
 ## [1.4.2] – 2026-09-29
 
 ### Added
