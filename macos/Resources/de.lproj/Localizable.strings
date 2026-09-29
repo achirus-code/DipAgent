@@ -13,6 +13,9 @@
 "Ask Claude for a fresh decision now? This costs one extra check." = "Claude jetzt um eine neue Bewertung bitten? Das kostet eine zusätzliche Prüfung.";
 "Ask Claude" = "Claude fragen";
 "Capital limit" = "Kapitallimit";
+"Buy at ≤ %@" = "Kauf bei ≤ %@";
+"Sell at ≥ %@" = "Verkauf bei ≥ %@";
+"Stop %@" = "Stop %@";
 "Paper result: %@" = "Paper-Ergebnis: %@";
 "Live result: %@" = "Live-Ergebnis: %@";
 "Result of the other trading mode – not part of the numbers above." = "Ergebnis des anderen Handelsmodus – nicht in den Zahlen oben enthalten.";

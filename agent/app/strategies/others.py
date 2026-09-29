@@ -33,6 +33,8 @@ class PriceZoneStrategy(Strategy):
     async def evaluate(self, ctx: Context) -> Decision:
         p, market, pos, q = ctx.params, ctx.market, ctx.position, ctx.quote
         price = market.price
+        ctx.targets(buy=p["buy_below"] if pos is None else None, sell=p["sell_above"] if pos else None,
+                    stop=p["stop_price"] if pos else None)
         if pos is None:
             if p["buy_below"] <= 0:
                 return Decision(m("zones.no_price"))
@@ -93,6 +95,8 @@ class DcaStrategy(Strategy):
             return Decision(m("dca.max_invest", invested=money(invested, q)))
 
         next_buy = int(ctx.state.get("last_buy_at") or 0) + p["interval_hours"] * 3_600_000
+        ctx.targets(sell=pos.entry_price * (1 + Decimal(str(p["take_profit"])) / 100) if pos and p["take_profit"] > 0 else None,
+                    note=m("targets.next_buy", left=dur(max(next_buy - ctx.now, 0))))
         if ctx.now >= next_buy:
             return Decision(m("dca.due"), Buy(amount, m("dca.reason")))
         if pos:
@@ -134,6 +138,7 @@ class ReboundTrailingStrategy(Strategy):
                 return Decision(m("cooldown", left=dur(wait)))
             high = await market.high(hours)
             distance = float((market.price / high - 1) * 100)
+            ctx.targets(buy=high * (1 - Decimal(str(p["drop_percent"])) / 100))
             if distance <= -p["drop_percent"]:
                 reason = m("trailing.buy_reason", distance=pct(distance), hours=hours, high=money(high, q))
                 return Decision(m("buy_signal"), Buy(Decimal(str(p["amount"])), reason))
@@ -143,11 +148,14 @@ class ReboundTrailingStrategy(Strategy):
         if p["stop_loss"] > 0 and profit <= -p["stop_loss"]:
             return Decision(m("stop_loss"), Sell(m("stop_loss.reason", profit=pct(profit)), stop=True))
         peak_profit = float((pos.peak / pos.entry_price - 1) * 100) if pos.entry_price else 0.0
+        stop_loss = pos.entry_price * (1 - Decimal(str(p["stop_loss"])) / 100) if p["stop_loss"] > 0 else None
         if peak_profit >= p["activation"]:
             # the trailing stop never sits below break-even: a trail wider than the activation must not turn into a loss
             stop = max(pos.peak * (1 - Decimal(str(p["trail"])) / 100), pos.break_even_price(ctx.fee_rate, q))
+            ctx.targets(sell=stop, stop=stop_loss, note=m("targets.trailing"))
             if market.price <= stop:
                 reason = m("trailing.triggered_reason", stop=money(stop, q), high=money(pos.peak, q), profit=pct(profit))
                 return Decision(m("trailing.triggered"), Sell(reason))
             return Decision(m("trailing.active", stop=money(stop, q), profit=pct(profit)))
+        ctx.targets(sell=pos.entry_price * (1 + Decimal(str(p["activation"])) / 100), stop=stop_loss, note=m("targets.trailing_from"))
         return Decision(m("trailing.position", profit=pct(profit), activation=pct(p["activation"])))

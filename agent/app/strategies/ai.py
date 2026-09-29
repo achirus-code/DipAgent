@@ -10,11 +10,13 @@ import json
 import logging
 import os
 import statistics
+import time
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Literal
 
 import anthropic
+import httpx
 from pydantic import BaseModel, Field
 
 from ..i18n import L, dur, m, pct
@@ -29,6 +31,23 @@ LEGACY_MODELS = {"claude-haiku-4-5"}
 API_KEY_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
 RETRY_AUTH_MS = 60 * 60_000
 RETRY_RATE_LIMIT_MS = 5 * 60_000
+
+# Crypto Fear & Greed index (alternative.me, free, no key). It is updated once a day – cached for an hour.
+FEAR_GREED_URL = "https://api.alternative.me/fng/?limit=7"
+FEAR_GREED_CACHE_S = 3600
+_fear_greed_cache: tuple[float, dict[str, Any] | None] = (0.0, None)
+
+SENTIMENT_INFO = (
+    "The brief includes the Crypto Fear & Greed index of the market as a whole (0 = extreme fear, 100 = extreme "
+    "greed; today first, then the previous days). Treat it as background only – it is not a timing signal."
+)
+SENTIMENT_CONTRARIAN = (
+    "The brief includes the Crypto Fear & Greed index of the market as a whole (0 = extreme fear, 100 = extreme "
+    "greed; today first, then the previous days). Use it as a contrarian signal ONLY at extremes: below 25 the crowd "
+    "is panicking, which historically favours patient buying and argues against panic selling; above 75 the crowd is "
+    "greedy, which favours taking profits and caution with new buys. In the middle range ignore it – it is not a "
+    "timing signal."
+)
 
 SYSTEM_PROMPT = """You manage one small crypto spot position for a retail trading bot on Revolut X.
 
@@ -84,13 +103,41 @@ class MarketBrief:
     amount: float
     stop_loss: float
     owner_instructions: str = ""  # optional extra rules from the bot owner
+    sentiment: dict[str, Any] | None = None  # Fear & Greed index, only when the bot asks for it
 
     def to_text(self) -> str:
-        data = {k: v for k, v in self.__dict__.items() if k != "owner_instructions"}
+        data = {k: v for k, v in self.__dict__.items()
+                if k != "owner_instructions" and not (k == "sentiment" and v is None)}
         text = json.dumps(data, ensure_ascii=False, default=float, indent=1)
         if self.owner_instructions:
             text += "\n\nAdditional instructions from the bot owner (follow them within the rules above):\n" + self.owner_instructions
         return text
+
+
+async def fetch_fear_greed() -> dict[str, Any] | None:
+    """Current Crypto Fear & Greed index with the last days, or None when unavailable. Overridden in tests."""
+    global _fear_greed_cache
+    cached_at, cached = _fear_greed_cache
+    if cached is not None and time.time() - cached_at < FEAR_GREED_CACHE_S:
+        return cached
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(FEAR_GREED_URL)
+            response.raise_for_status()
+            rows = response.json().get("data") or []
+        values = [int(r["value"]) for r in rows]
+        if not values:
+            return cached
+        result = {
+            "fear_greed_index": values[0],
+            "classification": str(rows[0].get("value_classification", "")),
+            "last_7_days": values,
+        }
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        log.warning("Fear & Greed index not available: %s", exc)
+        return cached
+    _fear_greed_cache = (time.time(), result)
+    return result
 
 
 def _price_at(candles: list, interval: int, t0: int) -> Decimal | None:
@@ -142,6 +189,16 @@ class AiStrategy(Strategy):
         Param("news", L("Consider news", "Nachrichten einbeziehen"), "bool", False,
               L("Claude may search the web for current news and market sentiment before deciding (costs a bit more).",
                 "Claude darf vor der Entscheidung im Web nach aktuellen Nachrichten und Marktstimmung suchen (kostet etwas mehr).")),
+        Param("sentiment", L("Fear & Greed index", "Fear-&-Greed-Index"), "select", "off", options=[
+            Option("off", L("Off", "Aus")),
+            Option("info", L("As background information", "Als Hintergrundinformation")),
+            Option("contrarian", L("As a contrarian signal at extremes", "Als Kontrasignal an Extremen")),
+        ], help=L(
+            "The Crypto Fear & Greed index (0–100) of the market as a whole. Contrarian: below 25 Claude leans towards "
+            "patient buying, above 75 towards taking profits; in between the index is ignored.",
+            "Der Crypto Fear & Greed Index (0–100) für den Gesamtmarkt. Kontrasignal: unter 25 neigt Claude zu "
+            "geduldigem Kaufen, über 75 zum Gewinnmitnehmen; dazwischen wird der Index ignoriert.",
+        )),
         Param("instructions", L("Additional instructions", "Zusätzliche Anweisungen"), "text", "",
               L("Optional. Your own rules or focus for Claude, e.g. “only buy on strong dips” – sent with every check.",
                 "Optional. Eigene Regeln oder Schwerpunkte für Claude, z. B. „nur bei starken Dips kaufen“ – wird bei jeder Prüfung mitgeschickt.")),
@@ -168,6 +225,8 @@ class AiStrategy(Strategy):
 
     async def ask(self, brief: MarketBrief, news: bool, model: str = DEFAULT_MODEL) -> AiDecision:
         """One decision from Claude. Overridden in tests."""
+        mode = (brief.sentiment or {}).get("mode")
+        sentiment_hint = SENTIMENT_CONTRARIAN if mode == "contrarian" else SENTIMENT_INFO if mode == "info" else ""
         request: dict[str, Any] = dict(
             model=model,
             max_tokens=4000,
@@ -176,6 +235,7 @@ class AiStrategy(Strategy):
                 "role": "user",
                 "content": (
                     ("You may run up to 3 web searches for news and sentiment about this asset first.\n\n" if news else "")
+                    + (sentiment_hint + "\n\n" if sentiment_hint else "")
                     + "Market brief:\n" + brief.to_text()
                 ),
             }],
@@ -214,6 +274,12 @@ class AiStrategy(Strategy):
         step = max(1, len(candles_24h) // 24)
         hourly = [float(c.close) for c in candles_24h[::step]][-12:]
 
+        sentiment = None
+        if p.get("sentiment") in ("info", "contrarian"):
+            index = await fetch_fear_greed()
+            if index:
+                sentiment = {"mode": p["sentiment"], **index}
+
         position = None
         if pos:
             position = {
@@ -241,6 +307,7 @@ class AiStrategy(Strategy):
             amount=float(p["amount"]),
             stop_loss=float(p["stop_loss"]),
             owner_instructions=str(p.get("instructions") or ""),
+            sentiment=sentiment,
         )
 
     # --- strategy ---------------------------------------------------------------
@@ -248,6 +315,8 @@ class AiStrategy(Strategy):
     async def evaluate(self, ctx: Context) -> Decision:
         p, market, pos = ctx.params, ctx.market, ctx.position
         state = ctx.state.setdefault("ai", {})
+        ctx.targets(stop=pos.entry_price * (1 - Decimal(str(p["stop_loss"])) / 100) if pos and p["stop_loss"] > 0 else None,
+                    note=m("targets.ai"))
 
         if pos is not None:
             profit = pos.pnl_pct(market.bid)

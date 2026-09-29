@@ -52,10 +52,12 @@ class DipStrategy(Strategy):
     async def evaluate(self, ctx: Context) -> Decision:
         p, market, pos = ctx.params, ctx.market, ctx.position
         hours = p["lookback_hours"]
-        change = await market.change_pct(hours)
+        ref = await market.price_at(hours)
+        change = float((market.price / ref - 1) * 100) if ref else 0.0
         window = m("window", hours=hours, change=pct(change))
 
         if pos is None:
+            ctx.targets(buy=ref * (1 + Decimal(str(p["buy_threshold"])) / 100))
             wait = cooldown_left(ctx, p["cooldown_minutes"])
             if wait:
                 return Decision(m("cooldown.window", left=dur(wait), window=window))
@@ -65,10 +67,19 @@ class DipStrategy(Strategy):
             return Decision(m("dip.waiting", window=window, threshold=pct(p["buy_threshold"])))
 
         profit = pos.pnl_pct(market.bid)
+        mode = p["sell_mode"]
+        # the price the sale waits for: profit target and/or recovered change (never below the minimum profit)
+        entry = pos.entry_price
+        sell_at = []
+        if mode in {"profit", "either"}:
+            sell_at.append(entry * (1 + Decimal(str(p["take_profit"])) / 100))
+        if mode in {"change", "either"}:
+            sell_at.append(max(ref * (1 + Decimal(str(p["sell_threshold"])) / 100), entry * (1 + Decimal(str(p["min_profit"])) / 100)))
+        ctx.targets(sell=min(sell_at) if sell_at else None,
+                    stop=entry * (1 - Decimal(str(p["stop_loss"])) / 100) if p["stop_loss"] > 0 else None)
         if p["stop_loss"] > 0 and profit <= -p["stop_loss"]:
             return Decision(m("stop_loss"), Sell(m("stop_loss.reason", profit=pct(profit)), stop=True))
 
-        mode = p["sell_mode"]
         if mode in {"profit", "either"} and profit >= p["take_profit"]:
             return Decision(m("take_profit"), Sell(m("take_profit.reason", profit=pct(profit), target=pct(p["take_profit"]))))
         if mode in {"change", "either"} and change >= p["sell_threshold"]:

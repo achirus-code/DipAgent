@@ -174,6 +174,11 @@ CATALOG: dict[str, L] = {
     "paren": L("{text} ({detail})", "{text} ({detail})"),
     # --- shared strategy texts
     "window": L("{hours} h: {change}", "{hours} h: {change}"),
+    # what the bot waits for (card line in the app)
+    "targets.next_buy": L("Next buy in {left}", "Nächster Kauf in {left}"),
+    "targets.trailing": L("Trailing stop", "Trailing-Stop"),
+    "targets.trailing_from": L("Trailing starts here", "Trailing startet hier"),
+    "targets.ai": L("Claude decides", "Claude entscheidet"),
     "cooldown": L("Cooling down for {left}", "Pause noch {left}"),
     "cooldown.window": L("Cooling down for {left} · {window}", "Pause noch {left} · {window}"),
     "buy_signal": L("Buy signal", "Kaufsignal"),

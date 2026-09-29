@@ -231,6 +231,17 @@ class Context:
     def now(self) -> int:
         return self.market.now
 
+    def targets(self, buy: Decimal | float | None = None, sell: Decimal | float | None = None,
+                stop: Decimal | float | None = None, note: dict | None = None) -> None:
+        """What the bot is waiting for – the app shows it on the card instead of the plain price.
+        Prices in the quote currency; ``note`` is a message for strategies without a fixed price."""
+        self.state["targets"] = {
+            "buy_price": float(buy) if buy else None,
+            "sell_price": float(sell) if sell else None,
+            "stop_price": float(stop) if stop else None,
+            "note": note,
+        }
+
 
 class Strategy:
     key: str = ""

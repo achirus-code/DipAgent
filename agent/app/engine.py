@@ -801,6 +801,7 @@ class Engine:
 
     def _record_buy(self, bot, state, pair, bought, spent, price, fee, order_id, paper, reason) -> Message:
         position = Position.from_state(state.get("position"))
+        state.pop("targets", None)  # the next check computes what the bot waits for now
         if position:
             position.qty += bought
             position.cost += spent
@@ -821,6 +822,7 @@ class Engine:
 
     def _record_sell(self, bot, state, pair, sold, proceeds, price, fee, order_id, paper, reason) -> Message:
         position = Position.from_state(state.get("position"))
+        state.pop("targets", None)  # the next check computes what the bot waits for now
         sold = min(sold, position.qty)
         cost_part = position.cost * sold / position.qty
         pnl = proceeds - cost_part
@@ -882,6 +884,8 @@ class Engine:
             "status_error": message_key(bot["status"]) in {"engine.error", "engine.order_not_found", "engine.holdings_mismatch"}
             or str(bot["status"]).startswith("Fehler"),
             "hint": hint,
+            "targets": {**t, "note": render(t["note"], lang) if t.get("note") else None}
+            if bot["enabled"] and (t := bot["state"].get("targets")) else None,
             "last_check": self._last_check.get(bot["id"], bot["last_check"]),
             "created_at": bot["created_at"],
             "pending_order": bool(bot["state"].get("pending_order")),

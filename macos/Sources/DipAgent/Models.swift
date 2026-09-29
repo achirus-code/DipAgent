@@ -145,6 +145,21 @@ struct MarketInfo: Codable, Equatable {
     }
 }
 
+/// The prices a bot waits for – a buy below, a sale above, the stop below – or a note when there is no fixed price.
+struct BotTargets: Codable, Equatable {
+    let buyPrice: Double?
+    let sellPrice: Double?
+    let stopPrice: Double?
+    let note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case buyPrice = "buy_price"
+        case sellPrice = "sell_price"
+        case stopPrice = "stop_price"
+        case note
+    }
+}
+
 struct Bot: Codable, Identifiable, Equatable {
     let id: Int
     let name: String
@@ -161,6 +176,7 @@ struct Bot: Codable, Identifiable, Equatable {
     let status: String
     let statusError: Bool?
     let hint: String? // e.g. a buy signal the limits blocked – shown until the limits allow it
+    let targets: BotTargets? // what the bot waits for (agent 1.12+)
     let lastCheck: Int64?
     let createdAt: Int64
     let pendingOrder: Bool
@@ -172,7 +188,7 @@ struct Bot: Codable, Identifiable, Equatable {
     let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, strategy, symbol, params, enabled, paper, status, hint, position, wins, losses, market
+        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, wins, losses, market
         case strategyName = "strategy_name"
         case strategyIcon = "strategy_icon"
         case baseCurrency = "base_currency"

@@ -2,6 +2,16 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **AI decides: Fear & Greed index.** New option per bot – *Off* (default), *As background information* or *As a
+  contrarian signal at extremes*. The agent fetches the Crypto Fear & Greed index (alternative.me, no key needed,
+  cached for an hour) and adds today's value with the last seven days to Claude's market brief. In contrarian
+  mode Claude is told to use it only below 25 (leaning towards patient buying) and above 75 (leaning towards
+  taking profits) and to ignore it in between. If the index cannot be fetched, the brief goes out without it.
+
 ## [1.11.0] – 2026-09-29
 
 ### Added

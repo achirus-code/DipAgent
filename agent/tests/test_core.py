@@ -717,6 +717,29 @@ async def test_no_paper_buy_into_live_position(tmp_path: Path):
     assert len(db.list_trades(bot_id)) == 1
 
 
+async def test_targets_show_what_the_bot_waits_for(tmp_path: Path):
+    ex = FakeExchange("2000", "2000")  # flat: no dip
+    db, engine = make_engine(tmp_path, ex)
+    dip = db.create_bot("Dip", "dip", "ETH-EUR", {"buy_threshold": -1.0, "take_profit": 2.0, "sell_mode": "profit", "stop_loss": 5.0}, True, True)
+    zones = db.create_bot("Z", "zones", "BTC-EUR", {"buy_below": 1900, "sell_above": 2100, "stop_price": 1800}, True, True)
+    await engine.tick()
+    stats = db.trade_stats()
+    t = engine.describe_bot(db.get_bot(dip), stats, "de")["targets"]
+    assert t["buy_price"] == pytest.approx(1980) and t["sell_price"] is None and t["note"] is None
+    t = engine.describe_bot(db.get_bot(zones), stats, "de")["targets"]
+    assert t["buy_price"] == 1900 and t["sell_price"] is None
+
+    ex.price = Decimal("1970")  # the dip: bought – the next check computes the sale targets
+    await engine.tick()
+    assert engine.describe_bot(db.get_bot(dip), db.trade_stats(), "de")["targets"] is None
+    await engine.tick()
+    bot = db.get_bot(dip)
+    entry = float(bot["state"]["position"]["cost"]) / float(bot["state"]["position"]["qty"])
+    t = engine.describe_bot(bot, db.trade_stats(), "de")["targets"]
+    assert t["buy_price"] is None
+    assert t["sell_price"] == pytest.approx(entry * 1.02) and t["stop_price"] == pytest.approx(entry * 0.95)
+
+
 async def test_summary_separates_paper_and_live(tmp_path: Path):
     ex = FakeExchange("2000", "1970")
     db, engine = make_engine(tmp_path, ex, live=True)
@@ -750,3 +773,35 @@ async def test_switching_to_paper_sells_all_live_positions(tmp_path: Path):
     assert db.get_bot(live_b)["state"]["position"] is None
     assert db.get_bot(paper)["state"]["position"]  # simulated positions are not touched
     assert len(ex.placed) == 4  # 2 live buys + 2 live sells
+
+
+@pytest.mark.asyncio
+async def test_ai_brief_includes_fear_greed_when_enabled(tmp_path: Path, monkeypatch):
+    from app.strategies import ai as ai_module
+    from app.strategies.ai import AiDecision
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    async def fake_index():
+        return {"fear_greed_index": 18, "classification": "Extreme Fear", "last_7_days": [18, 22, 25, 30, 28, 31, 35]}
+
+    monkeypatch.setattr(ai_module, "fetch_fear_greed", fake_index)
+    briefs = []
+
+    async def fake_ask(brief, news, model):
+        briefs.append(brief)
+        return AiDecision(action="wait", confidence=50, reason_en="x", reason_de="x")
+
+    monkeypatch.setattr(STRATEGIES["ai"], "ask", fake_ask)
+    db, engine = make_engine(tmp_path, FakeExchange("2000", "1970"))
+    db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "sentiment": "contrarian"}, True, True)
+    db.create_bot("AI off", "ai", "BTC-EUR", {"amount": 50}, True, True)
+    await engine.tick()
+
+    assert len(briefs) == 2
+    with_index = next(b for b in briefs if b.symbol == "ETH-EUR")
+    without = next(b for b in briefs if b.symbol == "BTC-EUR")
+    assert with_index.sentiment == {"mode": "contrarian", "fear_greed_index": 18, "classification": "Extreme Fear",
+                                    "last_7_days": [18, 22, 25, 30, 28, 31, 35]}
+    assert '"fear_greed_index": 18' in with_index.to_text()
+    assert without.sentiment is None and "fear_greed" not in without.to_text()

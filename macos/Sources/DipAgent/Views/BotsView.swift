@@ -180,13 +180,22 @@ struct BotCard: View {
                 }
 
                 if bot.enabled {
+                    // What the bot waits for – the price itself is only the small line below
                     HStack(alignment: .firstTextBaseline) {
-                        if let market = bot.market {
-                            Text(Fmt.price(market.price, bot.quoteCurrency))
-                                .font(.system(size: 12, weight: .medium)).monospacedDigit()
-                            Text(verbatim: "\(Fmt.pct(market.change24h)) 24h")
-                                .font(.system(size: 10.5, weight: .medium))
-                                .foregroundStyle(market.change24h.pnlColor)
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let targets = bot.targets, let line = targetLine(targets) {
+                                Text(line)
+                                    .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                                    .lineLimit(1)
+                            } else if let market = bot.market {
+                                Text(Fmt.price(market.price, bot.quoteCurrency))
+                                    .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                            }
+                            if let market = bot.market {
+                                Text(verbatim: bot.targets == nil ? "\(Fmt.pct(market.change24h)) 24h"
+                                                                  : "\(Fmt.price(market.price, bot.quoteCurrency)) · \(Fmt.pct(market.change24h)) 24h")
+                                    .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
+                            }
                         }
                         Spacer()
                         PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
@@ -292,6 +301,24 @@ struct BotCard: View {
             .controlSize(.small)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// "Buy at ≤ 2,350 €" while waiting, "Sell at ≥ 2,460 € · Stop 2,364 €" with a position – or the strategy's note.
+    private func targetLine(_ t: BotTargets) -> String? {
+        let q = bot.quoteCurrency
+        var parts: [String] = []
+        if bot.position == nil, let buy = t.buyPrice {
+            parts.append(String(localized: "Buy at ≤ \(Fmt.price(buy, q))"))
+        } else if bot.position != nil, let sell = t.sellPrice {
+            parts.append(String(localized: "Sell at ≥ \(Fmt.price(sell, q))"))
+        }
+        if let note = t.note, parts.isEmpty || (bot.position != nil && t.sellPrice != nil && bot.strategy == "trailing") {
+            parts.append(note)
+        }
+        if bot.position != nil, let stop = t.stopPrice {
+            parts.append(String(localized: "Stop \(Fmt.price(stop, q))"))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var deleteConfirmation: some View {
