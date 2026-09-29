@@ -21,7 +21,6 @@
 "Edit bot" = "Bot bearbeiten";
 "Create bot" = "Bot anlegen";
 "Save changes" = "Änderungen speichern";
-"e.g. ETH Dip" = "z. B. ETH Dip";
 "Trading pair" = "Handelspaar";
 "Trading pair and strategy are locked while a position is open." = "Handelspaar und Strategie sind bei offener Position gesperrt.";
 "Strategy" = "Strategie";
@@ -253,3 +252,8 @@
 "Discard position (no sale)" = "Position verwerfen (kein Verkauf)";
 "Remove the position from the books without selling? Coins on the exchange stay there." = "Position ohne Verkauf aus der Buchhaltung entfernen? Coins auf der Börse bleiben dort.";
 "The agent doesn't know this function yet – update the agent (add-on or Docker image) to the latest version." = "Der Agent kennt diese Funktion noch nicht – Agent (Add-on oder Docker-Image) auf die neueste Version aktualisieren.";
+"Dip" = "Dip";
+"Trailing" = "Trailing";
+"Zones" = "Zonen";
+"AI" = "KI";
+"Savings plan" = "Sparplan";

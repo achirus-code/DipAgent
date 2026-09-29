@@ -52,6 +52,21 @@ struct BotEditorView: View {
 
     private var strategy: Strategy? { store.strategy(strategyKey) }
     private var quote: String { String(symbol.split(separator: "-").last ?? "EUR") }
+    private var base: String { symbol.split(separator: "-").first.map(String.init) ?? symbol }
+
+    /// "ETH Dip", "BTC Savings plan" … – used when the name field is left empty.
+    private var generatedName: String {
+        let short: String
+        switch strategyKey {
+        case "dip": short = String(localized: "Dip")
+        case "trailing": short = String(localized: "Trailing")
+        case "zones": short = String(localized: "Zones")
+        case "dca": short = String(localized: "Savings plan")
+        case "ai": short = String(localized: "AI")
+        default: short = strategy?.name ?? strategyKey
+        }
+        return "\(base) \(short)"
+    }
     private var hasPosition: Bool { bot?.position != nil }
 
     var body: some View {
@@ -85,8 +100,7 @@ struct BotEditorView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+                    .disabled(saving)
                 }
                 .padding(14)
             }
@@ -101,7 +115,7 @@ struct BotEditorView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 field("Name") {
-                    TextField("e.g. ETH Dip", text: $name)
+                    TextField(generatedName, text: $name) // empty = the generated short name is used
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 200)
                 }
@@ -378,8 +392,9 @@ struct BotEditorView: View {
     private func save() {
         saving = true
         error = nil
+        let typed = name.trimmingCharacters(in: .whitespaces)
         let input = BotInput(
-            name: name.trimmingCharacters(in: .whitespaces),
+            name: typed.isEmpty ? generatedName : typed,
             strategy: strategyKey,
             symbol: symbol,
             params: values,

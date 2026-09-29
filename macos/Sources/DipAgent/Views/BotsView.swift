@@ -57,18 +57,14 @@ struct BotsView: View {
                     if !active.isEmpty {
                         BotGroupLabel(title: "Active", count: active.count, color: .green)
                         ForEach(active) { bot in
-                            BotCard(bot: bot)
-                                .contentShape(Rectangle())
-                                .onTapGesture { open(.bot(bot.id)) }
+                            BotCard(bot: bot, open: open)
                         }
                     }
                     if !stopped.isEmpty {
                         BotGroupLabel(title: "Stopped", count: stopped.count, color: .gray)
                             .padding(.top, active.isEmpty ? 0 : 6)
                         ForEach(stopped) { bot in
-                            BotCard(bot: bot)
-                                .contentShape(Rectangle())
-                                .onTapGesture { open(.bot(bot.id)) }
+                            BotCard(bot: bot, open: open)
                         }
                     }
                 }
@@ -147,7 +143,10 @@ struct BotGroupLabel: View {
 struct BotCard: View {
     @Environment(AppStore.self) private var store
     let bot: Bot
+    let open: (Route?) -> Void
     @State private var hovering = false
+    @State private var confirmingDelete = false
+    @State private var error: String?
 
     var body: some View {
         // Stopped bots get a compact, dimmed card: no market line and no status line – the group header
@@ -197,14 +196,61 @@ struct BotCard: View {
                 if let position = bot.position {
                     PositionStrip(bot: bot, position: position)
                 }
+
+                if confirmingDelete {
+                    deleteConfirmation
+                }
+                if let error {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10.5)).foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color.accentColor.opacity(hovering ? 0.35 : 0), lineWidth: 1)
         )
+        .contentShape(Rectangle())
+        .onTapGesture { open(.bot(bot.id)) }
+        .contextMenu {
+            Button { open(.editor(bot.id)) } label: { Label("Edit", systemImage: "pencil") }
+            Button {
+                Task { try? await store.setRunning(bot, !bot.enabled) }
+            } label: {
+                bot.enabled ? Label("Stop bot", systemImage: "pause.circle") : Label("Start bot", systemImage: "play.circle")
+            }
+            Divider()
+            Button(role: .destructive) { withAnimation { confirmingDelete = true; error = nil } } label: {
+                Label("Delete bot", systemImage: "trash")
+            }
+        }
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: hovering)
+        .animation(.snappy(duration: 0.2), value: confirmingDelete)
+    }
+
+    /// Inline confirmation (alerts are unreliable inside menu bar panels) – the same wording as in the bot view.
+    private var deleteConfirmation: some View {
+        VStack(spacing: 6) {
+            Text(bot.position != nil ? "The open position stays in your account – delete anyway?" : "Really delete this bot?")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Cancel") { confirmingDelete = false }
+                    .buttonStyle(.bordered)
+                Button("Delete bot") {
+                    Task {
+                        do { try await store.deleteBot(bot, force: bot.position != nil) } catch { self.error = error.localizedDescription }
+                        confirmingDelete = false
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            }
+            .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -300,6 +346,8 @@ struct BotDetailView: View {
     let open: (Route?) -> Void
     @State private var events: [BotEvent] = []
     @State private var error: String?
+    /// "Sell position now" failed – only then the escape hatch "discard without a sale" is offered.
+    @State private var sellFailed = false
 
     var body: some View {
         if let bot = store.bots.first(where: { $0.id == botId }) {
@@ -403,11 +451,17 @@ struct BotDetailView: View {
                         detail("Since", Date(ms: position.openedAt).formatted(.relative(presentation: .named)))
                     }
                     ConfirmButton(title: "Sell position now", confirmTitle: "Really sell at the market price?", icon: "arrow.up.right.circle") {
-                        do { try await store.closePosition(bot); error = nil } catch { self.error = error.localizedDescription }
+                        do { try await store.closePosition(bot); error = nil; sellFailed = false } catch {
+                            self.error = error.localizedDescription
+                            sellFailed = true
+                        }
                     }
-                    // for a position that is wrong in the books (e.g. after a short-reported fill): forget it, sell nothing
-                    ConfirmButton(title: "Discard position (no sale)", confirmTitle: "Remove the position from the books without selling? Coins on the exchange stay there.", icon: "xmark.bin") {
-                        do { try await store.discardPosition(bot); error = nil } catch { self.error = error.localizedDescription }
+                    if sellFailed {
+                        // the sale didn't go through – for a position that is wrong in the books (e.g. after a
+                        // short-reported fill) the way out is to forget it without selling
+                        ConfirmButton(title: "Discard position (no sale)", confirmTitle: "Remove the position from the books without selling? Coins on the exchange stay there.", icon: "xmark.bin", tint: .orange) {
+                            do { try await store.discardPosition(bot); error = nil; sellFailed = false } catch { self.error = error.localizedDescription }
+                        }
                     }
                 }
             }
