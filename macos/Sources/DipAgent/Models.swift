@@ -148,6 +148,7 @@ struct Bot: Codable, Identifiable, Equatable {
     let paperRequested: Bool
     let status: String
     let statusError: Bool?
+    let hint: String? // e.g. a buy signal the limits blocked – shown until the limits allow it
     let lastCheck: Int64?
     let createdAt: Int64
     let pendingOrder: Bool
@@ -159,7 +160,7 @@ struct Bot: Codable, Identifiable, Equatable {
     let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, strategy, symbol, params, enabled, paper, status, position, wins, losses, market
+        case id, name, strategy, symbol, params, enabled, paper, status, hint, position, wins, losses, market
         case strategyName = "strategy_name"
         case strategyIcon = "strategy_icon"
         case baseCurrency = "base_currency"

@@ -45,6 +45,8 @@ search for them – the current market sentiment. Weigh them as an experienced, 
   configured stop-loss may sell at a loss). If the position is under water, "hold" and explain what you wait for.
 - High volatility means wider swings: be quicker to secure a good profit, slower to buy into a falling knife.
 - Be decisive but not hasty; "wait"/"hold" are fine answers.
+- "confidence" is how sure you are that the action is right now, honestly calibrated: 50 means a coin toss,
+  80 or more only for a clear setup. The owner may require a minimum confidence before a trade is executed.
 
 Answer with the requested JSON only. Give the reason in two short sentences at most, once in English and once in
 German, written for the bot owner (no jargon, name the concrete facts you based the decision on)."""
@@ -129,6 +131,10 @@ class AiStrategy(Strategy):
             Option("claude-sonnet-5", L("Claude Sonnet 5", "Claude Sonnet 5")),
             Option("claude-haiku-4-5", L("Claude Haiku 4.5", "Claude Haiku 4.5")),
         ]),
+        Param("min_confidence", L("Minimum confidence", "Mindestsicherheit"), "percent", 0.0,
+              L("Buy or sell only when Claude is at least this sure. 0 = every decision is executed.",
+                "Nur kaufen oder verkaufen, wenn Claude mindestens so sicher ist. 0 = jede Entscheidung wird ausgeführt."),
+              min=0, max=100, step=5),
         Param("ai_interval", L("Ask Claude every", "Claude fragen alle"), "int", 30,
               L("Minutes between two decisions. Shorter = more responsive, but every check costs money.",
                 "Minuten zwischen zwei Entscheidungen. Kürzer = reagiert schneller, aber jede Prüfung kostet Geld."),
@@ -259,6 +265,9 @@ class AiStrategy(Strategy):
         last = state.get("last")
         if ctx.now < next_at and last:
             confidence = m("ai.confidence", value=int(last.get("confidence") or 0))
+            if last.get("skipped"):
+                verdict = m("ai.buy" if last.get("action") == "buy" else "ai.sell", confidence=confidence)
+                return Decision(m("ai.too_unsure", verdict=verdict, min=int(float(p["min_confidence"])), left=dur(next_at - ctx.now)))
             if pos:
                 return Decision(m("ai.holding", profit=pct(pos.pnl_pct(market.bid)), confidence=confidence, left=dur(next_at - ctx.now)))
             return Decision(m("ai.waiting", confidence=confidence, left=dur(next_at - ctx.now)))
@@ -293,11 +302,18 @@ class AiStrategy(Strategy):
         trade_reason = m("ai.trade_reason", reason=reason, confidence=decision.confidence)
         confidence = m("ai.confidence", value=decision.confidence)
 
+        left = dur(int(p["ai_interval"]) * 60_000)
+        min_confidence = float(p["min_confidence"])
+        if decision.action in ("buy", "sell") and decision.confidence < min_confidence:
+            # Claude's opinion is journaled as given – only the trade is held back
+            state["last"]["skipped"] = True
+            verdict = m("ai.buy" if decision.action == "buy" else "ai.sell", confidence=confidence)
+            return Decision(m("ai.too_unsure", verdict=verdict, min=int(min_confidence), left=left))
+
         if pos is None:
             if decision.action == "buy":
                 return Decision(m("ai.buy", confidence=confidence), Buy(Decimal(str(p["amount"])), trade_reason))
-            return Decision(m("ai.waiting", confidence=confidence, left=dur(int(p["ai_interval"]) * 60_000)))
+            return Decision(m("ai.waiting", confidence=confidence, left=left))
         if decision.action == "sell":
             return Decision(m("ai.sell", confidence=confidence), Sell(trade_reason))
-        return Decision(m("ai.holding", profit=pct(pos.pnl_pct(market.bid)), confidence=confidence,
-                          left=dur(int(p["ai_interval"]) * 60_000)))
+        return Decision(m("ai.holding", profit=pct(pos.pnl_pct(market.bid)), confidence=confidence, left=left))

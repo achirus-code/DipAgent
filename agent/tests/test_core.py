@@ -150,6 +150,35 @@ async def test_trailing_stop_never_below_break_even():
 
 
 @pytest.mark.asyncio
+async def test_ai_minimum_confidence_holds_back_trades(tmp_path: Path, monkeypatch):
+    from app.strategies.ai import AiDecision
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    confidences: list[int] = []
+
+    async def fake_ask(brief, news, model):
+        return AiDecision(action="buy", confidence=confidences.pop(0), reason_en="x", reason_de="x")
+
+    monkeypatch.setattr(STRATEGIES["ai"], "ask", fake_ask)
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 30, "min_confidence": 80}, True, True)
+
+    confidences.append(62)  # Claude wants to buy, but is not sure enough
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert bot["state"].get("position") is None
+    assert render(bot["status"], "de") == "Claude: kaufen (62 % sicher) · unter der Schwelle von 80 %, nicht ausgeführt · nächste Prüfung in 30 min"
+    await engine.tick()  # still visible until the next check
+    assert "unter der Schwelle" in render(db.get_bot(bot_id)["status"], "de")
+    assert db.list_ai_decisions(bot_id)[0]["action"] == "buy"  # the opinion is journaled as given
+
+    ex.now += 31 * 60_000
+    confidences.append(80)  # at the threshold: executed
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"]
+
+
 async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, monkeypatch):
     from app.strategies.ai import AiDecision, AiStrategy
 
@@ -563,6 +592,28 @@ async def test_capital_limit(tmp_path: Path):
     await engine.tick()
     assert open_positions(db) == 1
     assert len(db.list_trades()) == 1
+
+
+async def test_blocked_buy_stays_visible_as_hint(tmp_path: Path):
+    """A strategy like "AI decides" signals a buy only once per check – a limit that skipped it must stay visible."""
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    db.set_limits({"max_open_positions": 0, "max_total_invested": 120})
+    db.create_bot("A", "dip", "ETH-EUR", {"amount": 100}, True, True)
+    b = db.create_bot("B", "dip", "BTC-EUR", {"amount": 100}, True, True)
+    await engine.tick()
+    bot = db.get_bot(b)
+    assert Decimal(bot["state"]["blocked_buy"]["amount"]) == 100
+    described = engine.describe_bot(bot, db.trade_stats(), "de")
+    assert described["hint"].startswith("Kauf blockiert · Kapital-Limit: 100,00 EUR investiert, max. 120,00 EUR")
+    assert described["status"] == "Kaufsignal"  # the reason is in the hint, not twice on the card
+    # the limit is raised: the hint is gone right away and the next tick buys
+    db.set_limits({"max_total_invested": 300})
+    assert engine.describe_bot(db.get_bot(b), db.trade_stats(), "de")["hint"] is None
+    await engine.tick()
+    bot = db.get_bot(b)
+    assert bot["state"].get("position") and "blocked_buy" not in bot["state"]
+    assert engine.describe_bot(bot, db.trade_stats(), "de")["hint"] is None
 
 
 async def test_no_second_buy_while_position_open(tmp_path: Path):

@@ -351,7 +351,16 @@ class Engine:
             if not decision.action.stop and net < position.cost:
                 return m("engine.hold_no_loss", net=money(net, quote), cost=money(position.cost, quote))
             return await self._sell(bot, state, view, decision.action.reason)
+        if not self.blocked_buy(bot, state):
+            state.pop("blocked_buy", None)
         return decision.status
+
+    def blocked_buy(self, bot: dict, state: dict) -> Message | None:
+        """Why the last buy signal was skipped, as long as the limits still block it (else None)."""
+        blocked = state.get("blocked_buy")
+        if not blocked or state.get("position"):
+            return None
+        return self._limit_violation(bot, state, Decimal(blocked["amount"]))
 
     async def close_position(self, bot_id: int, reason: Message | None = None) -> Message:
         bot = self.db.get_bot(bot_id)
@@ -484,7 +493,11 @@ class Engine:
                 status = m("engine.buy_skipped", reason=blocked)
                 if render(bot["status"], "en") != render(status, "en"):  # log once, not every tick
                     self.db.add_event(bot["id"], "info", m("paren", text=status, detail=reason))
+                # shown as a hint until the limit allows the buy – a strategy like "AI decides" signals only
+                # once per check, so the skipped status alone would be gone with the next tick
+                state["blocked_buy"] = {"amount": str(quote_size), "at": now_ms()}
                 return status
+            state.pop("blocked_buy", None)
 
             if self.is_paper(bot):
                 price = view.ask
@@ -810,6 +823,8 @@ class Engine:
         base, quote = split_symbol(bot["symbol"])
         strategy = STRATEGIES.get(bot["strategy"])
         snap = self.snapshots.get(bot["symbol"])
+        blocked = self.blocked_buy(bot, bot["state"]) if bot["enabled"] else None
+        hint = render(m("engine.buy_blocked", reason=blocked), lang) if blocked else None
         s = stats.get(bot["id"], {})
         position = Position.from_state(bot["state"].get("position"))
         pos_json = None
@@ -839,9 +854,11 @@ class Engine:
             "enabled": bot["enabled"],
             "paper": self.is_paper(bot),
             "paper_requested": bot["paper"],
-            "status": render(bot["status"], lang),
+            # a skipped buy: the reason goes into the hint (it outlives the status), the status just says "buy signal"
+            "status": render(m("engine.buy_signal") if hint and message_key(bot["status"]) == "engine.buy_skipped" else bot["status"], lang),
             "status_error": message_key(bot["status"]) in {"engine.error", "engine.order_not_found", "engine.holdings_mismatch"}
             or str(bot["status"]).startswith("Fehler"),
+            "hint": hint,
             "last_check": self._last_check.get(bot["id"], bot["last_check"]),
             "created_at": bot["created_at"],
             "pending_order": bool(bot["state"].get("pending_order")),

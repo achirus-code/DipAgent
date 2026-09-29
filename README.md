@@ -62,7 +62,7 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 | **Rebound + trailing stop** | when the price is X % below the high of the last N hours | via a trailing stop once the activation profit is reached; optional stop-loss |
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |
-| **AI decides** | when Claude sees an edge – it looks at trend, volatility of the last hours, momentum and optionally the news every N minutes | when Claude decides to take the profit; never at a loss (only the optional stop-loss may). Needs `ANTHROPIC_API_KEY` on the agent; every check costs a few cents |
+| **AI decides** | when Claude sees an edge – it looks at trend, volatility of the last hours, momentum and optionally the news every N minutes; an optional minimum confidence holds back trades Claude is not sure enough about | when Claude decides to take the profit; never at a loss (only the optional stop-loss may). Needs `ANTHROPIC_API_KEY` on the agent; every check costs a few cents |
 
 > **Going live with open paper positions:** bots keep simulating an open paper position until it is sold, then buy
 > live. The savings plan is the exception – it closes its paper position (simulated) with the next instalment and

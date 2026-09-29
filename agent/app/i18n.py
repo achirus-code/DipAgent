@@ -250,6 +250,8 @@ CATALOG: dict[str, L] = {
     "ai.retry": L("Waiting {left} before asking Claude again", "Warte {left}, bevor Claude erneut gefragt wird"),
     "ai.confidence": L("{value} % sure", "{value} % sicher"),
     "ai.buy": L("Claude: buy ({confidence})", "Claude: kaufen ({confidence})"),
+    "ai.too_unsure": L("{verdict} · below the {min} % threshold, not executed · next check in {left}",
+                       "{verdict} · unter der Schwelle von {min} %, nicht ausgeführt · nächste Prüfung in {left}"),
     "ai.sell": L("Claude: sell ({confidence})", "Claude: verkaufen ({confidence})"),
     "ai.waiting": L("Claude: wait ({confidence}) · next check in {left}", "Claude: warten ({confidence}) · nächste Prüfung in {left}"),
     "ai.holding": L("Claude: hold ({confidence}, {profit}) · next check in {left}", "Claude: halten ({confidence}, {profit}) · nächste Prüfung in {left}"),
@@ -280,6 +282,8 @@ CATALOG: dict[str, L] = {
         "Live-Position offen, Modus wurde geändert – nur noch Verkauf",
     ),
     "engine.buy_skipped": L("Buy signal skipped · {reason}", "Kaufsignal übersprungen · {reason}"),
+    "engine.buy_blocked": L("Buy blocked · {reason}", "Kauf blockiert · {reason}"),
+    "engine.buy_signal": L("Buy signal", "Kaufsignal"),
     "engine.no_position": L("No position", "Keine Position"),
     "engine.hold_no_loss": L(
         "Sell signal, but {net} after fees < cost {cost} · holding (never sells at a loss)",

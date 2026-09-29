@@ -194,6 +194,7 @@ final class AppStore {
             let (newStatus, newSummary, newBots, newTrades) = try await (s, sum, b, t)
             status = newStatus
             summary = newSummary
+            notifyAboutBlockedBuys(newBots)
             bots = newBots
             notifyAboutNewTrades(newTrades)
             trades = newTrades
@@ -373,6 +374,20 @@ final class AppStore {
     private func requestNotificationPermission() {
         guard Bundle.main.bundleIdentifier != nil else { return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    /// A bot's buy signal was skipped by the limits (new since the last refresh): the hint is on the card,
+    /// but the user may not be looking – say it once. Not on the first load: an old hint is not news.
+    private func notifyAboutBlockedBuys(_ newBots: [Bot]) {
+        guard notificationsEnabled, Bundle.main.bundleIdentifier != nil, !bots.isEmpty else { return }
+        for bot in newBots {
+            guard bot.enabled, let hint = bot.hint, let before = bots.first(where: { $0.id == bot.id }), before.hint == nil else { continue }
+            let content = UNMutableNotificationContent()
+            content.title = String(localized: "\(bot.name): buy blocked")
+            content.body = hint
+            content.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "hint-\(bot.id)", content: content, trigger: nil))
+        }
     }
 
     private func notifyAboutNewTrades(_ newTrades: [Trade]) {

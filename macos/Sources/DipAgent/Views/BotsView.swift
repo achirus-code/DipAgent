@@ -305,11 +305,19 @@ struct StatusLine: View {
                 .padding(.top, 4)
                 .animation(bot.enabled ? .easeInOut(duration: 1).repeatForever() : .default, value: pulse)
                 .onAppear { pulse = true }
-            Text(statusText)
-                .font(.system(size: 10.5))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(statusText)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if bot.enabled, let hint = bot.hint {
+                    Label(hint, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 
