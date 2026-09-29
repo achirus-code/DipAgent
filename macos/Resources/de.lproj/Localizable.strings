@@ -268,3 +268,5 @@
 "WAIT" = "WARTEN";
 "What should the bot do?" = "Was soll der Bot tun?";
 "Change" = "Ändern";
+"≈ %@ ct per check · ≈ %@ per month at every %@ min" = "≈ %@ ct je Prüfung · ≈ %@ im Monat bei alle %@ min";
+"No Anthropic API key on the agent – set ANTHROPIC_API_KEY in agent/.env or the add-on option “Anthropic API key”." = "Kein Anthropic-API-Key im Agenten – ANTHROPIC_API_KEY in agent/.env oder die Add-on-Option „Anthropic-API-Key“ setzen.";

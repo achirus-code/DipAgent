@@ -119,13 +119,11 @@ class AiStrategy(Strategy):
     icon = "sparkles"
     params = [
         Param("amount", L("Amount per buy", "Betrag pro Kauf"), "money", 50.0, min=1),
-        Param("model", L("Model", "Modell"), "select", DEFAULT_MODEL,
-              L("Every check costs about 1 to 4 cents depending on the model.", "Jede Prüfung kostet je nach Modell etwa 1 bis 4 Cent."),
-              options=[
-                  Option("claude-opus-5", L("Claude Opus 5 – best judgement, ~4 ct per check", "Claude Opus 5 – bestes Urteil, ~4 ct je Prüfung")),
-                  Option("claude-sonnet-5", L("Claude Sonnet 5 – good and 3× cheaper, ~1.5 ct", "Claude Sonnet 5 – gut und 3× günstiger, ~1,5 ct")),
-                  Option("claude-haiku-4-5", L("Claude Haiku 4.5 – fastest and cheapest, ~1 ct", "Claude Haiku 4.5 – am schnellsten und günstigsten, ~1 ct")),
-              ]),
+        Param("model", L("Model", "Modell"), "select", DEFAULT_MODEL, options=[
+            Option("claude-opus-5", L("Claude Opus 5", "Claude Opus 5")),
+            Option("claude-sonnet-5", L("Claude Sonnet 5", "Claude Sonnet 5")),
+            Option("claude-haiku-4-5", L("Claude Haiku 4.5", "Claude Haiku 4.5")),
+        ]),
         Param("ai_interval", L("Ask Claude every", "Claude fragen alle"), "int", 30,
               L("Minutes between two decisions. Shorter = more responsive, but every check costs money.",
                 "Minuten zwischen zwei Entscheidungen. Kürzer = reagiert schneller, aber jede Prüfung kostet Geld."),

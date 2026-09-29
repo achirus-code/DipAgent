@@ -95,6 +95,7 @@ struct BotEditorView: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel("What should the bot do?")
                 ForEach(store.strategies) { s in
+                    let unavailable = s.key == "ai" && store.status?.aiConfigured == false
                     Button { select(s); choosingStrategy = false } label: {
                         HStack(alignment: .top, spacing: 12) {
                             IconTile(symbol: s.icon, colors: strategyColors(s.key), size: 36)
@@ -123,8 +124,17 @@ struct BotEditorView: View {
                                 .strokeBorder(strategyKey == s.key && bot != nil ? Color.accentColor : .clear, lineWidth: 1.5)
                         )
                         .contentShape(Rectangle())
+                        .opacity(unavailable ? 0.45 : 1)
                     }
                     .buttonStyle(.plain)
+                    .disabled(unavailable)
+                    if unavailable {
+                        Label("No Anthropic API key on the agent – set ANTHROPIC_API_KEY in agent/.env or the add-on option “Anthropic API key”.", systemImage: "key.fill")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 6)
+                            .padding(.top, -4)
+                    }
                 }
             }
             .padding(14)
@@ -262,7 +272,8 @@ struct BotEditorView: View {
     private func plannedResult(for key: String) -> (text: String, color: Color)? {
         let feeRate = store.status?.takerFee ?? TradeCostCheck.defaultFeeRate
         func num(_ key: String) -> Double? { values[key]?.double ?? strategy?.params.first { $0.key == key }?.default.double }
-        guard let amount = num("amount"), amount > 0 else { return nil }
+        let amount = num("amount") ?? 0
+        if key != "model", amount <= 0 { return nil }
         func net(_ pct: Double, on base: Double = amount) -> Double {
             base * pct / 100 - TradeCostCheck.roundTripFee(amount: base, quote: quote, feeRate: feeRate)
         }
@@ -270,6 +281,18 @@ struct BotEditorView: View {
             (template(Fmt.money(value, quote, signed: true)), value > 0 ? .green : .orange)
         }
         switch (strategyKey, key) {
+        case ("ai", "model"):
+            // rough Anthropic list prices for ~800 input and 600–2,000 output tokens per check
+            let perCheck: Double
+            switch values["model"]?.string ?? "claude-sonnet-5" {
+            case "claude-opus-5": perCheck = 0.04
+            case "claude-haiku-4-5": perCheck = 0.008
+            default: perCheck = 0.015
+            }
+            let interval = max(num("ai_interval") ?? 30, 1)
+            let perMonth = perCheck * 43_200 / interval
+            let cents = (perCheck * 100).formatted(.number.precision(.fractionLength(0...1)))
+            return (String(localized: "≈ \(cents) ct per check · ≈ \(Fmt.money(perMonth, quote)) per month at every \(Fmt.number(interval)) min"), .secondary)
         case ("dip", "take_profit"):
             guard let pct = num(key), pct > 0 else { return nil }
             return profit(net(pct)) { String(localized: "Planned profit ≈ \($0) after fees") }
