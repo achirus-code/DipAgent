@@ -262,6 +262,10 @@ CATALOG: dict[str, L] = {
     "engine.error": L("Error: {error}", "Fehler: {error}"),
     "engine.unknown_strategy": L("Unknown strategy “{strategy}”", "Unbekannte Strategie „{strategy}“"),
     "engine.manual_close": L("Closed manually", "Manuell geschlossen"),
+    "engine.position_discarded": L(
+        "Position discarded without a sale: {qty} {base} (cost {cost}) removed from the books – whatever is on the exchange stays there",
+        "Position ohne Verkauf verworfen: {qty} {base} (Einstand {cost}) aus der Buchhaltung entfernt – was auf der Börse liegt, bleibt dort",
+    ),
     "engine.live_ended": L("Live trading ended – position sold", "Live-Handel beendet – Position verkauft"),
     "engine.live_close_failed": L("Live position could not be sold: {error}", "Live-Position konnte nicht verkauft werden: {error}"),
     "engine.order_running_no_buy": L("Order in progress – no further buy", "Order läuft bereits – kein weiterer Kauf"),

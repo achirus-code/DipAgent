@@ -69,7 +69,7 @@ class MarketBrief:
     bid: float
     ask: float
     changes: dict[str, float]  # e.g. {"1h": -0.4, "4h": 1.2, "24h": -3.1, "72h": 2.0}
-    volatility_4h: float  # std deviation of 5-minute returns, in %
+    volatility_4h: float  # std deviation of 15-minute returns over the last 4 h, in %
     volatility_24h: float  # std deviation of 15-minute returns, in %
     range_24h: float  # (high - low) / low over 24 h, in %
     distance_to_high_72h: float  # price vs. the 72 h high, in %
@@ -82,6 +82,17 @@ class MarketBrief:
 
     def to_text(self) -> str:
         return json.dumps(self.__dict__, ensure_ascii=False, default=float, indent=1)
+
+
+def _price_at(candles: list, interval: int, t0: int) -> Decimal | None:
+    """Price at ``t0`` from a candle series (same rule as MarketView.price_at)."""
+    if not candles:
+        return None
+    before = [c for c in candles if c.start <= t0]
+    if not before:
+        return candles[0].open
+    c = before[-1]
+    return c.close if (t0 - c.start) > interval * 30_000 else c.open
 
 
 def _returns_stdev(values: list[Decimal]) -> float:
@@ -160,16 +171,19 @@ class AiStrategy(Strategy):
     # --- market data ------------------------------------------------------------
 
     async def brief(self, ctx: Context) -> MarketBrief:
+        """Two candle series only – 24 h in 15-minute candles (shared with the engine's 24 h change) and 72 h in
+        hourly candles; the shorter windows are derived from the 24 h series instead of extra requests."""
         market, pos, p = ctx.market, ctx.position, ctx.params
-        changes = {}
-        for hours in (1, 4, 24, 72):
-            try:
-                changes[f"{hours}h"] = round(await market.change_pct(hours), 2)
-            except Exception:  # noqa: BLE001 – a missing window must not stop the decision
-                pass
-        candles_4h, _ = await market.candles(4)
-        candles_24h, _ = await market.candles(24)
-        candles_72h, _ = await market.candles(72)
+        candles_24h, interval_24h = await market.candles(24)
+        candles_72h, interval_72h = await market.candles(72)
+        changes: dict[str, float] = {}
+        for hours, candles, interval in ((1, candles_24h, interval_24h), (4, candles_24h, interval_24h),
+                                         (24, candles_24h, interval_24h), (72, candles_72h, interval_72h)):
+            ref = _price_at(candles, interval, ctx.now - hours * 3_600_000)
+            if ref:
+                changes[f"{hours}h"] = round(float((market.price / ref - 1) * 100), 2)
+        per_4h = max(1, int(4 * 60 / interval_24h))
+        candles_4h = candles_24h[-per_4h:]
         high_72h = max([c.high for c in candles_72h] + [market.price])
         low_72h = min([c.low for c in candles_72h] + [market.price])
         high_24h = max([c.high for c in candles_24h] + [market.price])

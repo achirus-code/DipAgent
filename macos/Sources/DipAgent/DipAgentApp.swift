@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         setIconHighlighted(true)
+        store.panelVisible = true
         if opening { store.refreshIfStale() } // fresh numbers (or an immediate reconnect) when the panel opens
         // No control starts focused (otherwise AppKit puts the focus ring on the first key view – the refresh button).
         // SwiftUI may assign its initial focus a runloop later, so clear it again then.
@@ -104,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func hidePanel() {
+        store.panelVisible = false
         panel?.orderOut(nil)
         setIconHighlighted(false)
     }

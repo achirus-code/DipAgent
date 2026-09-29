@@ -29,7 +29,8 @@ from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell
 log = logging.getLogger("dipagent.engine")
 
 # market orders usually fill within a second – poll quickly first, then back off (≈ 8 s in total)
-ORDER_POLL_DELAYS = (0.3, 0.5, 0.7, 1.0, 1.0, 1.5, 1.5, 1.5)
+# first read a second after placing (Revolut X rarely has complete fill data earlier), ~9 s in total
+ORDER_POLL_DELAYS = (1.0, 0.7, 1.0, 1.0, 1.5, 1.5, 2.0)
 ERROR_BACKOFF_MS = 5 * 60_000
 # network hiccups and exchange-side errors clear up quickly – don't sit out a dip for 5 minutes because of one
 TRANSIENT_BACKOFF_MS = 60_000
@@ -38,11 +39,11 @@ ORDER_LOOKUP_GRACE_MS = 3 * 60_000
 # a "filled" order whose reported fill is still short of what we asked for: re-read it for this long
 FILL_CHECK_MS = 15 * 60_000
 # how often the booked live positions are compared with the balances on the exchange
-HOLDINGS_CHECK_MS = 5 * 60_000
+HOLDINGS_CHECK_MS = 30 * 60_000  # plus right after every own fill
 # how many symbols are fetched from the exchange concurrently during a tick
 MARKET_DATA_CONCURRENCY = 4
 # candles are re-fetched when a new candle starts or after this long, not on every tick
-CANDLE_CACHE_MS = 5 * 60_000
+CANDLE_MAX_AGE_MS = 6 * 3_600_000  # safety net only – candles are normally reused until the next candle starts
 
 Message = dict | str
 
@@ -99,7 +100,8 @@ class CandleCache:
     """Candles per (symbol, interval, window), shared by all bots and kept across ticks.
 
     The set of candles only changes when a new candle starts; in between only the forming candle moves, which is
-    covered by the live ticker price the strategies use anyway. Re-fetched at the latest after ``CANDLE_CACHE_MS``.
+    covered by the live ticker price the strategies use anyway. So a series is reused until the next candle starts
+    (15 min for 24 h windows, an hour for 48–72 h windows) – ``CANDLE_MAX_AGE_MS`` is only a safety net.
     """
 
     def __init__(self) -> None:
@@ -112,7 +114,7 @@ class CandleCache:
         key = (symbol, interval, until - since)
         bucket = until // (interval * 60_000)
         entry = self._entries.get(key)
-        if entry and entry[0] == bucket and now_ms() - entry[1] < CANDLE_CACHE_MS:
+        if entry and entry[0] == bucket and now_ms() - entry[1] < CANDLE_MAX_AGE_MS:
             return entry[2]
         candles = await exchange.candles(symbol, interval, since, until)
         self._entries[key] = (bucket, now_ms(), candles)
@@ -376,6 +378,31 @@ class Engine:
                 self._persist(bot, state, status, before)
             return status
 
+    async def discard_position(self, bot_id: int) -> Message:
+        """Drop a position from the books without selling – for a position that is wrong (e.g. booked from a
+        short-reported fill) while the coins stay, or don't exist, on the exchange. No trade is booked."""
+        async with self._locks[bot_id]:
+            bot = self.db.get_bot(bot_id)
+            if not bot:
+                raise KeyError(bot_id)
+            state = bot["state"]
+            position = Position.from_state(state.get("position"))
+            if position is None:
+                raise Problem("err.no_position")
+            if state.get("pending_order"):
+                raise Problem("err.order_running")
+            before = self._snapshot(bot)
+            pair = await self.exchange.pair(bot["symbol"])
+            state["position"] = None
+            state.pop("holdings_mismatch", None)
+            state.pop("fill_check", None)
+            state["last_sell_at"] = self.exchange.now_ms()
+            status = m("engine.position_discarded", qty=qty(position.qty), base=pair.base, cost=money(position.cost, pair.quote))
+            self.db.add_event(bot["id"], "info", status)
+            self._holdings_checked_at = 0
+            self._persist(bot, state, status, before)
+            return status
+
     async def close_live_positions(self, reason: Message) -> list[dict[str, Any]]:
         """Market-sell every open live position (used when switching back to paper mode)."""
         results = []
@@ -547,10 +574,12 @@ class Engine:
                 base_size=base_size, quote_size=quote_size,
             )
         except Exception as exc:
+            self.exchange.invalidate_balances()  # the order may have gone through anyway
             if definitely_not_placed(exc):
                 state.pop("pending_order", None)
                 raise
             raise Problem("err.order_unclear", error=as_message(exc)) from exc
+        self.exchange.invalidate_balances()  # balances change with this order – the cache must not serve the old ones
         self.db.update_bot(bot["id"], state=state)
         self.db.add_event(bot["id"], "info", m("engine.order_sent", id=pending["id"], side=m(f"side.{side}")))
         return pending

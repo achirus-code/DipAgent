@@ -114,17 +114,13 @@ def test_bot_changes_are_refused_while_an_order_is_pending(api):
     assert client.delete(f"/api/bots/{bot_id}", params={"force": "true"}).status_code == 204
 
 
-def test_balances_are_cached_briefly(api, monkeypatch):
+def test_balances_come_from_the_exchange(api, monkeypatch):
+    """Caching is the Revolut X wrapper's job (see test_core) – the endpoint just asks the exchange."""
     client, main, _ = api
-    calls = []
 
-    class Counting(main.Exchange):
+    class Fixed(main.Exchange):
         async def balances(self):
-            calls.append(1)
-            return {"EUR": (main.Decimal(1), main.Decimal(1))}
+            return {"EUR": (main.Decimal(1), main.Decimal(2)), "DUST": (main.Decimal(0), main.Decimal(0))}
 
-    monkeypatch.setattr(main.engine, "exchange", Counting())
-    monkeypatch.setattr(main, "_balances_cache", None)
-    assert client.get("/api/balances").json()[0]["currency"] == "EUR"
-    client.get("/api/balances")
-    assert len(calls) == 1
+    monkeypatch.setattr(main.engine, "exchange", Fixed())
+    assert client.get("/api/balances").json() == [{"currency": "EUR", "available": 1.0, "total": 2.0}]

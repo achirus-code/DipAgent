@@ -98,6 +98,9 @@ class Exchange:
         """Look up an order by our own client_order_id (used when the placement response got lost)."""
     async def close(self) -> None: ...
 
+    def invalidate_balances(self) -> None:
+        """Called after every own order – exchanges that cache balances drop the cached ones."""
+
     async def pair(self, symbol: str) -> PairInfo:
         pairs = await self.pairs()
         if symbol not in pairs:
@@ -113,10 +116,20 @@ class Exchange:
 class RevolutXExchange(Exchange):
     name = "revolutx"
 
+    # Balances only change through our own orders (trades the user makes directly on Revolut X are deliberately
+    # not tracked), so they are cached and dropped whenever we place an order. The app, the holdings check and the
+    # pre-flight checks before buys and sells all share this cache.
+    BALANCES_TTL = 60.0
+
     def __init__(self, client: RevolutXClient):
         self.client = client
         self._pairs: dict[str, PairInfo] = {}
         self._pairs_at = 0.0
+        self._balances: dict[str, tuple[Decimal, Decimal]] | None = None
+        self._balances_at = 0.0
+
+    def invalidate_balances(self) -> None:
+        self._balances = None
 
     @staticmethod
     def _parse_ticker(t: dict) -> Ticker:
@@ -173,7 +186,11 @@ class RevolutXExchange(Exchange):
         return self._pairs
 
     async def balances(self) -> dict[str, tuple[Decimal, Decimal]]:
-        return {b["currency"]: (dec(b["available"]), dec(b["total"])) for b in await self.client.balances()}
+        if self._balances is not None and time.monotonic() - self._balances_at < self.BALANCES_TTL:
+            return self._balances
+        self._balances = {b["currency"]: (dec(b["available"]), dec(b["total"])) for b in await self.client.balances()}
+        self._balances_at = time.monotonic()
+        return self._balances
 
     async def place_market_order(self, symbol, side, *, client_order_id, base_size=None, quote_size=None) -> str:
         result = await self.client.place_market_order(

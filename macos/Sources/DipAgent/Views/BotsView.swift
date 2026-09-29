@@ -405,6 +405,10 @@ struct BotDetailView: View {
                     ConfirmButton(title: "Sell position now", confirmTitle: "Really sell at the market price?", icon: "arrow.up.right.circle") {
                         do { try await store.closePosition(bot); error = nil } catch { self.error = error.localizedDescription }
                     }
+                    // for a position that is wrong in the books (e.g. after a short-reported fill): forget it, sell nothing
+                    ConfirmButton(title: "Discard position (no sale)", confirmTitle: "Remove the position from the books without selling? Coins on the exchange stay there.", icon: "xmark.bin") {
+                        do { try await store.discardPosition(bot); error = nil } catch { self.error = error.localizedDescription }
+                    }
                 }
             }
         }

@@ -51,6 +51,10 @@ final class AppStore {
     var limits: Limits?
     var exchangeInfo: ExchangeInfo?
     var lastUpdate: Date?
+    /// Set by the AppDelegate. Balances are only fetched while the panel is open – nobody sees them otherwise,
+    /// and every fetch is a request to Revolut X.
+    var panelVisible = false
+    private var balancesUpdatedAt: Date?
     var isRefreshing = false
     /// While true (Revolut X setup) the panel stays open when the user clicks elsewhere.
     @ObservationIgnored var keepPanelOpen = false
@@ -193,7 +197,12 @@ final class AppStore {
             bots = newBots
             notifyAboutNewTrades(newTrades)
             trades = newTrades
-            balances = (try? await client.get("/balances")) ?? balances
+            if panelVisible || balancesUpdatedAt.map({ Date().timeIntervalSince($0) > 600 }) ?? true {
+                if let fresh: [Balance] = try? await client.get("/balances") {
+                    balances = fresh
+                    balancesUpdatedAt = Date()
+                }
+            }
             limits = (try? await client.get("/limits")) ?? limits
             exchangeInfo = (try? await client.get("/exchange")) ?? exchangeInfo
             if pairs.isEmpty { pairs = (try? await client.get("/pairs")) ?? [] }
@@ -284,6 +293,13 @@ final class AppStore {
     func closePosition(_ bot: Bot) async throws {
         guard let client else { return }
         let _: Bot = try await client.post("/bots/\(bot.id)/close")
+        await refresh()
+    }
+
+    /// Removes the position from the agent's books without selling anything.
+    func discardPosition(_ bot: Bot) async throws {
+        guard let client else { return }
+        let _: Bot = try await client.post("/bots/\(bot.id)/discard")
         await refresh()
     }
 

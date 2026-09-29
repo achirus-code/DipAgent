@@ -363,6 +363,89 @@ async def test_fill_is_booked_only_after_two_matching_reads(tmp_path: Path, monk
     assert Decimal(db.list_trades(bot_id)[0]["base_qty"]) > Decimal("0.02")  # the full 50 € buy, not a third
 
 
+@pytest.mark.asyncio
+async def test_candles_are_reused_until_the_next_candle_starts():
+    from app.engine import CandleCache
+
+    class CountingExchange(FakeExchange):
+        calls = 0
+
+        async def candles(self, symbol, interval, since, until):
+            self.calls += 1
+            return await super().candles(symbol, interval, since, until)
+
+    ex = CountingExchange("2000", "2000")
+    cache = CandleCache()
+    hour = 3_600_000
+    t = 100 * hour
+    await cache.fetch(ex, "ETH-EUR", 15, t - 24 * hour, t)
+    await cache.fetch(ex, "ETH-EUR", 15, t - 24 * hour + 10 * 60_000, t + 10 * 60_000)  # 10 min later, same candle
+    assert ex.calls == 1
+    await cache.fetch(ex, "ETH-EUR", 15, t - 24 * hour + 16 * 60_000, t + 16 * 60_000)  # next 15-minute candle
+    assert ex.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_revolut_balances_are_cached_and_dropped_after_an_order():
+    from app.exchange import RevolutXExchange
+
+    class FakeClient:
+        calls = 0
+
+        async def balances(self):
+            self.calls += 1
+            return [{"currency": "EUR", "available": "10", "total": "10"}]
+
+        async def place_market_order(self, symbol, side, *, client_order_id, base_size=None, quote_size=None):
+            return {"venue_order_id": "o1"}
+
+    client = FakeClient()
+    ex = RevolutXExchange(client)
+    await ex.balances()
+    await ex.balances()
+    assert client.calls == 1
+    await ex.place_market_order("ETH-EUR", "buy", client_order_id="c1", quote_size=Decimal(5))
+    ex.invalidate_balances()
+    await ex.balances()
+    assert client.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_ai_brief_needs_only_two_candle_series(monkeypatch):
+    from app.strategies.ai import AiStrategy
+
+    class CountingExchange(FakeExchange):
+        windows: list = []
+
+        async def candles(self, symbol, interval, since, until):
+            self.windows.append((interval, round((until - since - interval * 60_000) / HOUR)))  # minus the lead-in candle
+            return await super().candles(symbol, interval, since, until)
+
+    ex = CountingExchange("2000", "1990")
+    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
+    strategy = STRATEGIES["ai"]
+    assert isinstance(strategy, AiStrategy)
+    brief = await strategy.brief(Context(strategy.normalize({}), None, {}, view))
+    assert set(brief.changes) == {"1h", "4h", "24h", "72h"}
+    assert len(ex.windows) == 2 and {w[1] for w in ex.windows} == {24, 72}
+
+
+@pytest.mark.asyncio
+async def test_discard_position_forgets_it_without_a_trade(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("app.engine.ORDER_POLL_DELAYS", (0, 0))
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50}, True, False)
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"]
+    await engine.discard_position(bot_id)
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["position"] is None and "discarded" in render(bot["status"], "en")
+    assert [t["side"] for t in db.list_trades(bot_id)] == ["buy"]  # nothing sold
+    with pytest.raises(Exception):
+        await engine.discard_position(bot_id)  # no position any more
+
+
 def test_min_profit_cannot_be_negative():
     assert STRATEGIES["dip"].normalize({"min_profit": -1})["min_profit"] == 0
 

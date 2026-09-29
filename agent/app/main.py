@@ -31,9 +31,8 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES
 from .strategies.ai import AiStrategy
 
-VERSION = "1.4.2"
+VERSION = "1.5.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
-BALANCES_CACHE_SECONDS = 10
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("dipagent")
@@ -75,14 +74,11 @@ def build_exchange() -> Exchange:
 
 def swap_exchange(new: Exchange) -> None:
     """Switch the engine to new credentials without restarting the container."""
-    global _balances_cache
-    _balances_cache = None
     engine.replace_exchange(new)
 
 
 credentials = CredentialStore(settings)
 engine = Engine(db, build_exchange(), settings)
-_balances_cache: tuple[float, dict[str, tuple[Decimal, Decimal]]] | None = None
 
 
 @asynccontextmanager
@@ -373,15 +369,10 @@ async def pairs(lang: str = Depends(get_lang)) -> list[str]:
 
 @api.get("/balances")
 async def balances(lang: str = Depends(get_lang)) -> list[dict[str, Any]]:
-    global _balances_cache
-    if _balances_cache and time.monotonic() - _balances_cache[0] < BALANCES_CACHE_SECONDS:
-        data = _balances_cache[1]
-    else:
-        try:
-            data = await engine.exchange.balances()
-        except Exception as exc:  # noqa: BLE001
-            raise fail_with(502, lang, exc) from exc
-        _balances_cache = (time.monotonic(), data)
+    try:
+        data = await engine.exchange.balances()  # cached by the exchange for a minute, dropped after own orders
+    except Exception as exc:  # noqa: BLE001
+        raise fail_with(502, lang, exc) from exc
     return [
         {"currency": c, "available": float(a), "total": float(t)}
         for c, (a, t) in sorted(data.items())
@@ -461,6 +452,17 @@ async def close_position(bot_id: int, lang: str = Depends(get_lang)) -> dict[str
         raise fail_with(409, lang, exc) from exc
     except Exception as exc:  # noqa: BLE001
         raise fail_with(502, lang, exc) from exc
+    return _describe(bot_id, lang)
+
+
+@api.post("/bots/{bot_id}/discard")
+async def discard_position(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, Any]:
+    """Remove the position from the books without selling (the coins stay on the exchange, unmanaged)."""
+    _bot_or_404(bot_id, lang)
+    try:
+        await engine.discard_position(bot_id)
+    except Problem as exc:
+        raise fail_with(409, lang, exc) from exc
     return _describe(bot_id, lang)
 
 
