@@ -203,22 +203,21 @@ struct BotCard: View {
                                     asking = false
                                 }
                             } label: {
-                                HStack(spacing: 4) {
+                                Group {
                                     if asking {
-                                        ProgressView().controlSize(.mini).frame(width: 10, height: 10)
+                                        ProgressView().controlSize(.mini)
                                     } else {
-                                        Image(systemName: "arrow.clockwise")
+                                        Image(systemName: "text.bubble")
+                                            .font(.system(size: 10, weight: .medium))
                                     }
-                                    Text("Ask now")
                                 }
-                                .font(.system(size: 10.5, weight: .medium))
-                                .padding(.horizontal, 8).padding(.vertical, 4)
-                                .background(Capsule().fill(Color.accentColor.opacity(0.12)))
-                                .foregroundStyle(Color.accentColor)
+                                .frame(width: 22, height: 22)
+                                .background(Circle().fill(Color.primary.opacity(0.08)))
+                                .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
                             .disabled(asking || bot.pendingOrder)
-                            .help("Get a fresh decision from Claude right now (costs one check)")
+                            .help("Ask Claude now – a fresh decision right away (costs one check)")
                             Button { open(.bot(bot.id)) } label: {
                                 Label("Decisions", systemImage: "sparkles")
                                     .font(.system(size: 10.5, weight: .medium))
