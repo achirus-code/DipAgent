@@ -2,13 +2,17 @@ import AppKit
 import Observation
 import SwiftUI
 
+/// Plain AppKit entry point: the UI lives in a status-bar panel managed by the AppDelegate.
+/// (A SwiftUI `App` needs at least one scene, and its `Settings` scene opens an empty
+/// "DipAgent Settings" window the first time the app is activated.)
 @main
-struct DipAgentApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-
-    var body: some Scene {
-        // The UI lives in a status-bar panel managed by the AppDelegate.
-        Settings { EmptyView() }
+enum DipAgentMain {
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
+        withExtendedLifetime(delegate) {}
     }
 }
 

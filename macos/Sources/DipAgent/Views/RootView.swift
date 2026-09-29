@@ -31,6 +31,7 @@ struct RootView: View {
     @Environment(AppStore.self) private var store
     @State private var tab: MainTab
     @State private var route: Route?
+    @State private var openedBefore = false
     @Namespace private var tabNamespace
 
     init(initialTab: MainTab = .bots, initialRoute: Route? = nil) {
@@ -54,8 +55,14 @@ struct RootView: View {
         .onChange(of: route, initial: true) { _, newRoute in
             store.keepPanelOpen = newRoute == .exchangeSetup
         }
-        .onAppear {
-            if case .notConfigured = store.connection { tab = .settings }
+        .onChange(of: store.panelVisible) { _, visible in
+            // The first time the panel opens: bots when the agent is (being) connected, otherwise the settings.
+            guard visible, !openedBefore else { return }
+            openedBefore = true
+            switch store.connection {
+            case .connected, .connecting: tab = .bots
+            case .notConfigured, .failed: tab = .settings
+            }
         }
     }
 
