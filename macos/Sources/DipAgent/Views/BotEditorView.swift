@@ -53,6 +53,8 @@ struct BotEditorView: View {
     @State private var loaded = false
     /// New bots start with the strategy choice; the settings come after (existing bots open on the settings).
     @State private var choosingStrategy = false
+    /// A free-text rule ("Additional instructions") is edited on its own page with a large text area.
+    @State private var editingText: StrategyParam?
 
     private var strategy: Strategy? { store.strategy(strategyKey) }
     private var quote: String { String(symbol.split(separator: "-").last ?? "EUR") }
@@ -75,18 +77,59 @@ struct BotEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: bot == nil ? "New bot" : "Edit bot", back: {
-                if choosingStrategy && bot == nil { close(nil) } else if choosingStrategy { choosingStrategy = false } else { close(nil) }
-            })
-            Divider().opacity(0.5)
-            if choosingStrategy {
-                strategyChoice
+            if let param = editingText {
+                textPage(param)
             } else {
-                settings
+                PageHeader(title: bot == nil ? "New bot" : "Edit bot", back: {
+                    if choosingStrategy && bot == nil { close(nil) } else if choosingStrategy { choosingStrategy = false } else { close(nil) }
+                })
+                Divider().opacity(0.5)
+                if choosingStrategy {
+                    strategyChoice
+                } else {
+                    settings
+                }
             }
         }
         .onAppear(perform: load)
         .animation(.snappy(duration: 0.25), value: choosingStrategy)
+        .animation(.snappy(duration: 0.25), value: editingText?.key)
+    }
+
+    /// Full-height text area for a free-text rule; edits go straight into the bot's values, "Back" returns.
+    private func textPage(_ param: StrategyParam) -> some View {
+        let text = Binding(get: { (values[param.key] ?? param.default).string }, set: { values[param.key] = .string($0) })
+        return VStack(spacing: 0) {
+            PageHeader(title: LocalizedStringKey(param.label), back: { editingText = nil }, trailing: AnyView(
+                Button("Done") { editingText = nil }
+                    .buttonStyle(.borderedProminent).controlSize(.small)
+            ))
+            Divider().opacity(0.5)
+            VStack(alignment: .leading, spacing: 8) {
+                if let help = param.help, !help.isEmpty {
+                    Text(help).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                TextEditor(text: text)
+                    .font(.system(size: 12))
+                    .scrollContentBackground(.hidden)
+                    .padding(6)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.background.opacity(0.6)))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(0.12)))
+                    .frame(maxHeight: .infinity)
+                HStack {
+                    Text("\(Fmt.number(Double(text.wrappedValue.count))) / 2,000 characters")
+                        .font(.system(size: 10)).foregroundStyle(text.wrappedValue.count > 2000 ? .red : .secondary)
+                        .monospacedDigit()
+                    Spacer()
+                    if !text.wrappedValue.isEmpty {
+                        Button("Clear") { text.wrappedValue = "" }
+                            .buttonStyle(.plain).font(.system(size: 10.5)).foregroundStyle(Color.accentColor)
+                    }
+                }
+            }
+            .padding(14)
+        }
     }
 
     // MARK: Step 1 – which kind of bot
@@ -261,7 +304,8 @@ struct BotEditorView: View {
                                     set: { values[param.key] = $0 }
                                 ),
                                 currency: quote,
-                                note: plannedResult(for: param.key)
+                                note: plannedResult(for: param.key),
+                                editText: param.type == "text" ? { editingText = param } : nil
                             )
                         }
                     }
@@ -433,6 +477,10 @@ struct BotEditorView: View {
     }
 
     private func load() {
+        // dev aid for snapshots: `-snapshotTextPage 1` opens the free-text page right away
+        if UserDefaults.standard.bool(forKey: "snapshotTextPage") {
+            DispatchQueue.main.async { editingText = strategy?.params.first { $0.type == "text" } }
+        }
         guard !loaded else { return }
         loaded = true
         if let bot {
@@ -491,16 +539,30 @@ struct ParamField: View {
     let currency: String
     /// Small line under the help text, e.g. the profit this setting aims for in money.
     var note: (text: String, color: Color)? = nil
+    /// Free text is edited on its own page – this opens it.
+    var editText: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if param.type == "text" {
-                // free text gets the full width below its label
-                Text(param.label).font(.system(size: 11.5, weight: .medium))
-                TextField("", text: Binding(get: { value.string }, set: { value = .string($0) }), axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(2...6)
-                    .font(.system(size: 11))
+                HStack(spacing: 8) {
+                    Text(param.label).font(.system(size: 11.5, weight: .medium))
+                    Spacer(minLength: 4)
+                    Button { editText?() } label: {
+                        Label(value.string.isEmpty ? "Write…" : "Edit…", systemImage: "square.and.pencil")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                }
+                if !value.string.isEmpty {
+                    Text(value.string)
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.05)))
+                }
             } else {
                 HStack(spacing: 8) {
                     Text(param.label).font(.system(size: 11.5, weight: .medium))

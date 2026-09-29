@@ -12,6 +12,16 @@
 "Ask Claude now – a fresh decision right away (costs one check)" = "Claude jetzt fragen – sofort eine neue Bewertung (kostet eine Prüfung)";
 "Ask Claude for a fresh decision now? This costs one extra check." = "Claude jetzt um eine neue Bewertung bitten? Das kostet eine zusätzliche Prüfung.";
 "Ask Claude" = "Claude fragen";
+"Capital limit" = "Kapitallimit";
+"%@ free" = "%@ frei";
+"%@ of %@ invested" = "%@ von %@ investiert";
+"No limit" = "Kein Limit";
+"What the bots may still invest in total – set under Settings → Risk & limits. A buy beyond it is skipped." = "Was die Bots insgesamt noch investieren dürfen – einstellbar unter Einstellungen → Risiko & Limits. Ein Kauf darüber wird übersprungen.";
+"Write…" = "Schreiben…";
+"Edit…" = "Bearbeiten…";
+"Done" = "Fertig";
+"Clear" = "Leeren";
+"%@ / 2,000 characters" = "%@ / 2.000 Zeichen";
 "%@ sells %@" = "%@ verkauft %@";
 "%@ %@ at %@" = "%@ %@ zu %@";
 "Result %@" = "Ergebnis %@";
@@ -240,7 +250,7 @@
 "Realized plus open result of all bots, fees already deducted." = "Realisiertes plus offenes Ergebnis aller Bots, Gebühren bereits abgezogen.";
 "%@ fees" = "%@ Gebühren";
 "Exchange fees of all buys and sells – already included in the result." = "Börsengebühren aller Käufe und Verkäufe – im Ergebnis bereits enthalten.";
-"%@ available · %@ in positions" = "%@ verfügbar · %@ in Positionen";
+"%@: %@ · %@ available" = "%@: %@ · %@ verfügbar";
 "Running first" = "Laufende zuerst";
 "Newest" = "Neueste";
 "Sort by" = "Sortieren nach";

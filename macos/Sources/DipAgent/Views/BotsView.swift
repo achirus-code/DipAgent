@@ -204,7 +204,7 @@ struct BotCard: View {
                                     if asking {
                                         ProgressView().controlSize(.mini)
                                     } else {
-                                        Image(systemName: "text.bubble")
+                                        Image(systemName: "brain")
                                             .font(.system(size: 10, weight: .medium))
                                     }
                                 }

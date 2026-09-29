@@ -177,6 +177,7 @@ struct HeaderView: View {
                     balances: store.balances,
                     bots: store.bots,
                     trades: store.trades,
+                    limits: store.limits,
                     isDemo: store.status?.exchange == "mock"
                 )
             }
@@ -218,6 +219,7 @@ struct SummaryCard: View {
     var balances: [Balance] = []
     var bots: [Bot] = []
     var trades: [Trade] = []
+    var limits: Limits?
     var isDemo = false
 
     var body: some View {
@@ -244,18 +246,25 @@ struct SummaryCard: View {
                 metric("Today", result?.today ?? 0, currency)
             }
 
-            if let balance = cash.first(where: { $0.currency == currency }) {
-                let positions = positionsValue(currency)
+            // How much the bots may still invest under "Risk & limits" – so a new bot is not sized into the limit.
+            if let limits {
+                let invested = limits.invested ?? 0
+                let free = max(limits.maxTotalInvested - invested, 0)
                 Divider().opacity(0.4)
-                infoRow(balanceTitle, icon: "banknote") {
+                infoRow("Capital limit", icon: "gauge.with.needle") {
                     VStack(alignment: .trailing, spacing: 1) {
-                        Text(Fmt.money(balance.total + positions, currency))
-                            .font(.system(size: 11.5, weight: .semibold, design: .rounded)).monospacedDigit()
-                        Text("\(Fmt.money(balance.available, currency)) available · \(Fmt.money(positions, currency)) in positions")
-                            .font(.system(size: 9.5)).foregroundStyle(.secondary).monospacedDigit()
+                        if limits.maxTotalInvested > 0 {
+                            Text("\(Fmt.money(free, currency)) free")
+                                .font(.system(size: 11.5, weight: .semibold, design: .rounded)).monospacedDigit()
+                                .foregroundStyle(free < 1 ? Color.orange : Color.primary)
+                            Text("\(Fmt.money(invested, currency)) of \(Fmt.money(limits.maxTotalInvested, currency)) invested")
+                                .font(.system(size: 9.5)).foregroundStyle(.secondary).monospacedDigit()
+                        } else {
+                            Text("No limit").font(.system(size: 11.5, weight: .medium)).foregroundStyle(.secondary)
+                        }
                     }
                 }
-                .help("Cash on the exchange plus the current value of all open live positions.")
+                .help("What the bots may still invest in total – set under Settings → Risk & limits. A buy beyond it is skipped.")
             }
 
             let others = otherCurrencies(except: currency)
@@ -291,6 +300,14 @@ struct SummaryCard: View {
             .font(.system(size: 10.5))
             .foregroundStyle(.secondary)
             .labelStyle(CompactLabelStyle())
+
+            // The exchange balance is not DipAgent's result – just a footnote
+            if let balance = cash.first(where: { $0.currency == currency }) {
+                let positions = positionsValue(currency)
+                Text("\(balanceTitle): \(Fmt.money(balance.total + positions, currency)) · \(Fmt.money(balance.available, currency)) available")
+                    .font(.system(size: 10)).foregroundStyle(.tertiary).monospacedDigit()
+                    .help("Cash on the exchange plus the current value of all open live positions.")
+            }
         }
         .padding(14)
         .background(
@@ -309,7 +326,7 @@ struct SummaryCard: View {
         )
     }
 
-    private var balanceTitle: LocalizedStringKey { isDemo ? "Balance (demo)" : "Balance on Revolut X" }
+    private var balanceTitle: String { isDemo ? String(localized: "Balance (demo)") : String(localized: "Balance on Revolut X") }
 
     /// Spendable cash (fiat and the bots' quote currencies) – coins held in positions are not included.
     private var cash: [Balance] {
