@@ -53,6 +53,19 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS events_bot ON events(bot_id, created_at);
 -- an exchange order can only ever be booked once
 CREATE UNIQUE INDEX IF NOT EXISTS trades_order ON trades(order_id) WHERE order_id IS NOT NULL;
+-- every answer of the "AI decides" strategy, so the app can show how Claude judged the market over time
+CREATE TABLE IF NOT EXISTS ai_decisions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    bot_id      INTEGER NOT NULL,
+    action      TEXT    NOT NULL,
+    confidence  INTEGER NOT NULL,
+    reason_en   TEXT    NOT NULL,
+    reason_de   TEXT    NOT NULL,
+    price       TEXT    NOT NULL,
+    profit_pct  REAL,
+    created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ai_decisions_bot ON ai_decisions(bot_id, id);
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -267,6 +280,25 @@ class Database:
         )
         # keep the log bounded
         self._exec("DELETE FROM events WHERE id <= (SELECT MAX(id) - 5000 FROM events)")
+
+    # --- AI decisions -----------------------------------------------------
+
+    def add_ai_decision(self, bot_id: int, action: str, confidence: int, reason_en: str, reason_de: str,
+                        price: str, profit_pct: float | None) -> None:
+        self._exec(
+            "INSERT INTO ai_decisions (bot_id, action, confidence, reason_en, reason_de, price, profit_pct, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (bot_id, action, confidence, reason_en, reason_de, price, profit_pct, now_ms()),
+        )
+        # keep the journal bounded per bot
+        self._exec(
+            "DELETE FROM ai_decisions WHERE bot_id = ? AND id <= "
+            "(SELECT id FROM ai_decisions WHERE bot_id = ? ORDER BY id DESC LIMIT 1 OFFSET 500)",
+            (bot_id, bot_id),
+        )
+
+    def list_ai_decisions(self, bot_id: int, limit: int = 100) -> list[dict[str, Any]]:
+        return self._all("SELECT * FROM ai_decisions WHERE bot_id = ? ORDER BY id DESC LIMIT ?", (bot_id, limit))
 
     def list_events(self, bot_id: int | None = None, limit: int = 100) -> list[dict[str, Any]]:
         if bot_id is None:

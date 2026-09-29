@@ -190,7 +190,21 @@ struct BotCard: View {
                         PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
                     }
 
-                    StatusLine(bot: bot)
+                    HStack(alignment: .top, spacing: 8) {
+                        StatusLine(bot: bot)
+                        if bot.strategy == "ai" {
+                            Spacer(minLength: 0)
+                            Button { open(.bot(bot.id)) } label: {
+                                Label("Decisions", systemImage: "sparkles")
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Claude's answers and how sure it was")
+                        }
+                    }
                 }
 
                 if let position = bot.position {
@@ -345,6 +359,7 @@ struct BotDetailView: View {
     let botId: Int
     let open: (Route?) -> Void
     @State private var events: [BotEvent] = []
+    @State private var decisions: [AiDecision] = []
     @State private var error: String?
     /// "Sell position now" failed – only then the escape hatch "discard without a sale" is offered.
     @State private var sellFailed = false
@@ -367,6 +382,7 @@ struct BotDetailView: View {
                         }
                         if let position = bot.position { positionCard(bot, position) }
                         stats(bot)
+                        if bot.strategy == "ai" { claudeDecisions }
                         parameters(bot)
                         recentTrades(bot)
                         activity
@@ -376,7 +392,10 @@ struct BotDetailView: View {
                 }
                 .scrollIndicators(.never)
             }
-            .task(id: store.lastUpdate) { events = await store.events(for: botId) }
+            .task(id: store.lastUpdate) {
+                events = await store.events(for: botId)
+                if bot.strategy == "ai" { decisions = await store.decisions(for: botId) }
+            }
         } else {
             VStack {
                 PageHeader(title: "Bot", back: { open(nil) })
@@ -523,6 +542,30 @@ struct BotDetailView: View {
         }
     }
 
+    /// Claude's answers over time: action, how sure it was (the score) and why.
+    private var claudeDecisions: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel("Claude's decisions", trailing: decisions.isEmpty ? nil : AnyView(
+                Text("\(String(decisions.count)) · Ø \(String(decisions.map(\.confidence).reduce(0, +) / max(decisions.count, 1))) % sure")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+            ))
+            Card {
+                if decisions.isEmpty {
+                    Text("No answers yet – Claude is asked at the next check.")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(decisions.prefix(30)) { decision in
+                            DecisionRow(decision: decision, currency: quoteCurrency)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var quoteCurrency: String { store.bots.first { $0.id == botId }?.quoteCurrency ?? "EUR" }
+
     @ViewBuilder
     private var activity: some View {
         if !events.isEmpty {
@@ -589,6 +632,81 @@ struct BotDetailView: View {
         case "error": return .red
         default: return .secondary
         }
+    }
+}
+
+/// One of Claude's answers: action badge, confidence bar, reason, price and time.
+struct DecisionRow: View {
+    let decision: AiDecision
+    let currency: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Badge(text: actionText, color: actionColor, icon: actionIcon)
+                ConfidenceBar(value: decision.confidence, color: actionColor)
+                Text(verbatim: "\(decision.confidence) %")
+                    .font(.system(size: 10.5, weight: .semibold)).monospacedDigit()
+                    .foregroundStyle(actionColor)
+                Spacer()
+                Text(Date(ms: decision.createdAt).formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+            }
+            Text(decision.reason)
+                .font(.system(size: 10.5))
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                Text(Fmt.price(decision.price, currency)).monospacedDigit()
+                if let profit = decision.profitPct {
+                    Text(verbatim: "·")
+                    Text(Fmt.pct(profit)).foregroundStyle(profit.pnlColor).monospacedDigit()
+                }
+            }
+            .font(.system(size: 9.5)).foregroundStyle(.secondary)
+        }
+    }
+
+    private var actionText: LocalizedStringKey {
+        switch decision.action {
+        case "buy": return "BUY"
+        case "sell": return "SELL"
+        case "hold": return "HOLD"
+        default: return "WAIT"
+        }
+    }
+
+    private var actionColor: Color {
+        switch decision.action {
+        case "buy": return .green
+        case "sell": return .orange
+        case "hold": return .blue
+        default: return .gray
+        }
+    }
+
+    private var actionIcon: String {
+        switch decision.action {
+        case "buy": return "arrow.down.circle.fill"
+        case "sell": return "arrow.up.circle.fill"
+        case "hold": return "hand.raised.fill"
+        default: return "clock.fill"
+        }
+    }
+}
+
+/// 0–100 as a thin bar – the "score" of a decision.
+struct ConfidenceBar: View {
+    let value: Int
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.08))
+                Capsule().fill(color.opacity(0.8)).frame(width: geo.size.width * CGFloat(max(0, min(value, 100))) / 100)
+            }
+        }
+        .frame(width: 60, height: 5)
     }
 }
 

@@ -218,6 +218,11 @@ final class AppStore {
         return (try? await client.get("/events", query: ["bot_id": String(botId), "limit": "50"])) ?? []
     }
 
+    func decisions(for botId: Int) async -> [AiDecision] {
+        guard let client else { return [] }
+        return (try? await client.get("/bots/\(botId)/decisions", query: ["limit": "100"])) ?? []
+    }
+
     func strategy(_ key: String) -> Strategy? { strategies.first { $0.key == key } }
 
     // MARK: - Bot actions

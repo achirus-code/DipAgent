@@ -236,6 +236,23 @@ struct Strategy: Codable, Identifiable {
     var id: String { key }
 }
 
+/// One answer of Claude for an "AI decides" bot.
+struct AiDecision: Codable, Identifiable {
+    let id: Int
+    let action: String // buy | wait | hold | sell
+    let confidence: Int // 0–100
+    let reason: String
+    let price: Double
+    let profitPct: Double?
+    let createdAt: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case id, action, confidence, reason, price
+        case profitPct = "profit_pct"
+        case createdAt = "created_at"
+    }
+}
+
 struct BotEvent: Codable, Identifiable {
     let id: Int
     let botId: Int?

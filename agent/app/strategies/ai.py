@@ -240,11 +240,10 @@ class AiStrategy(Strategy):
         next_at = int(state.get("next_at") or 0)
         last = state.get("last")
         if ctx.now < next_at and last:
-            reason = m("ai.reason", en=last["reason_en"], de=last["reason_de"])
-            status_key = "ai.holding" if pos else "ai.waiting"
+            confidence = m("ai.confidence", value=int(last.get("confidence") or 0))
             if pos:
-                return Decision(m(status_key, profit=pct(pos.pnl_pct(market.bid)), reason=reason, left=dur(next_at - ctx.now)))
-            return Decision(m(status_key, reason=reason, left=dur(next_at - ctx.now)))
+                return Decision(m("ai.holding", profit=pct(pos.pnl_pct(market.bid)), confidence=confidence, left=dur(next_at - ctx.now)))
+            return Decision(m("ai.waiting", confidence=confidence, left=dur(next_at - ctx.now)))
         if ctx.now < next_at:  # backing off after an error
             return Decision(m("ai.retry", left=dur(next_at - ctx.now)))
 
@@ -266,14 +265,21 @@ class AiStrategy(Strategy):
             "action": decision.action, "confidence": decision.confidence,
             "reason_en": decision.reason_en, "reason_de": decision.reason_de, "at": ctx.now,
         }
+        if ctx.journal:
+            ctx.journal({
+                "action": decision.action, "confidence": decision.confidence,
+                "reason_en": decision.reason_en, "reason_de": decision.reason_de,
+                "price": str(market.price), "profit_pct": pos.pnl_pct(market.bid) if pos else None,
+            })
         reason = m("ai.reason", en=decision.reason_en, de=decision.reason_de)
         trade_reason = m("ai.trade_reason", reason=reason, confidence=decision.confidence)
+        confidence = m("ai.confidence", value=decision.confidence)
 
         if pos is None:
             if decision.action == "buy":
-                return Decision(m("ai.buy", reason=reason), Buy(Decimal(str(p["amount"])), trade_reason))
-            return Decision(m("ai.waiting", reason=reason, left=dur(int(p["ai_interval"]) * 60_000)))
+                return Decision(m("ai.buy", confidence=confidence), Buy(Decimal(str(p["amount"])), trade_reason))
+            return Decision(m("ai.waiting", confidence=confidence, left=dur(int(p["ai_interval"]) * 60_000)))
         if decision.action == "sell":
-            return Decision(m("ai.sell", reason=reason), Sell(trade_reason))
-        return Decision(m("ai.holding", profit=pct(pos.pnl_pct(market.bid)), reason=reason,
+            return Decision(m("ai.sell", confidence=confidence), Sell(trade_reason))
+        return Decision(m("ai.holding", profit=pct(pos.pnl_pct(market.bid)), confidence=confidence,
                           left=dur(int(p["ai_interval"]) * 60_000)))

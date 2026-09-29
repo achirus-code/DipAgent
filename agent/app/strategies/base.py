@@ -222,6 +222,8 @@ class Context:
     market: MarketView
     quote: str = "EUR"
     fee_rate: float = 0.0009  # exchange fee per order, e.g. 0.09 %
+    # set by the engine: strategies can persist a journal entry (used by "AI decides" for Claude's answers)
+    journal: Callable[[dict[str, Any]], None] | None = None
 
     @property
     def now(self) -> int:

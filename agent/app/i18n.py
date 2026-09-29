@@ -248,10 +248,11 @@ CATALOG: dict[str, L] = {
     "ai.rate_limited": L("Anthropic rate limit – asking again in {left}", "Anthropic-Ratenlimit – neue Anfrage in {left}"),
     "ai.error": L("Claude not reachable ({error}) – asking again in {left}", "Claude nicht erreichbar ({error}) – neue Anfrage in {left}"),
     "ai.retry": L("Waiting {left} before asking Claude again", "Warte {left}, bevor Claude erneut gefragt wird"),
-    "ai.buy": L("Claude buys: {reason}", "Claude kauft: {reason}"),
-    "ai.sell": L("Claude sells: {reason}", "Claude verkauft: {reason}"),
-    "ai.waiting": L("Claude waits: {reason} · next check in {left}", "Claude wartet: {reason} · nächste Prüfung in {left}"),
-    "ai.holding": L("Claude holds ({profit}): {reason} · next check in {left}", "Claude hält ({profit}): {reason} · nächste Prüfung in {left}"),
+    "ai.confidence": L("{value} % sure", "{value} % sicher"),
+    "ai.buy": L("Claude: buy ({confidence})", "Claude: kaufen ({confidence})"),
+    "ai.sell": L("Claude: sell ({confidence})", "Claude: verkaufen ({confidence})"),
+    "ai.waiting": L("Claude: wait ({confidence}) · next check in {left}", "Claude: warten ({confidence}) · nächste Prüfung in {left}"),
+    "ai.holding": L("Claude: hold ({confidence}, {profit}) · next check in {left}", "Claude: halten ({confidence}, {profit}) · nächste Prüfung in {left}"),
     # --- engine
     "engine.instance_locked": L(
         "Another DipAgent engine is already running with this data directory – this instance does not trade.",

@@ -174,7 +174,7 @@ async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, mon
     assert briefs[-1].position is None and "24h" in briefs[-1].changes
     # within the interval Claude is not asked again – the last answer is repeated
     await engine.tick()
-    assert len(briefs) == 1 and "Claude waits" in render(db.get_bot(bot_id)["status"], "en")
+    assert len(briefs) == 1 and "Claude: wait (80 % sure)" in render(db.get_bot(bot_id)["status"], "en")
 
     ex.now += 31 * 60_000
     answers.append("buy")
@@ -187,7 +187,7 @@ async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, mon
     answers.append("hold")
     await engine.tick()
     assert db.get_bot(bot_id)["state"]["position"] and briefs[-1].position["profit_pct"] > 0
-    assert "Claude holds" in render(db.get_bot(bot_id)["status"], "en")
+    assert "Claude: hold" in render(db.get_bot(bot_id)["status"], "en")
 
     ex.now += 31 * 60_000
     answers.append("sell")
@@ -195,6 +195,9 @@ async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, mon
     assert db.get_bot(bot_id)["state"].get("position") is None
     trades = db.list_trades(bot_id)
     assert [t["side"] for t in trades] == ["sell", "buy"] and "Claude (80 %" in render(trades[0]["reason"], "en")
+    journal = db.list_ai_decisions(bot_id)
+    assert [d["action"] for d in journal] == ["sell", "hold", "buy", "wait"]
+    assert journal[0]["confidence"] == 80 and journal[1]["profit_pct"] > 0 and journal[3]["profit_pct"] is None
 
 
 @pytest.mark.asyncio

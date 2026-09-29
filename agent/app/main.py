@@ -31,7 +31,7 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES
 from .strategies.ai import AiStrategy
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -481,6 +481,21 @@ async def trades(
         r["paper"] = bool(r["paper"])
         r["reason"] = render(r["reason"], lang)
     return rows
+
+
+@api.get("/bots/{bot_id}/decisions")
+async def ai_decisions(bot_id: int, limit: int = Query(100, ge=1, le=500), lang: str = Depends(get_lang)) -> list[dict[str, Any]]:
+    """Claude's answers for an "AI decides" bot, newest first."""
+    _bot_or_404(bot_id, lang)
+    rows = db.list_ai_decisions(bot_id, limit)
+    return [
+        {
+            "id": r["id"], "action": r["action"], "confidence": r["confidence"],
+            "reason": r["reason_de"] if lang == "de" else r["reason_en"],
+            "price": float(r["price"]), "profit_pct": r["profit_pct"], "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
 
 
 @api.get("/events")

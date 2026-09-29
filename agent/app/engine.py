@@ -338,7 +338,8 @@ class Engine:
             state["position"] = position.to_state()
 
         _, quote = split_symbol(bot["symbol"])
-        ctx = Context(strategy.normalize(bot["params"]), position, state, view, quote, float(self.settings.taker_fee))
+        ctx = Context(strategy.normalize(bot["params"]), position, state, view, quote, float(self.settings.taker_fee),
+                      journal=lambda entry: self.db.add_ai_decision(bot_id=bot["id"], **entry))
         decision = await strategy.evaluate(ctx)
 
         if isinstance(decision.action, Buy):

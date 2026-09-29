@@ -257,3 +257,12 @@
 "Zones" = "Zonen";
 "AI" = "KI";
 "Savings plan" = "Sparplan";
+"Decisions" = "Entscheidungen";
+"Claude's answers and how sure it was" = "Claudes Antworten und wie sicher es sich war";
+"Claude's decisions" = "Claudes Entscheidungen";
+"%@ · Ø %@ %% sure" = "%@ · Ø %@ %% sicher";
+"No answers yet – Claude is asked at the next check." = "Noch keine Antworten – Claude wird bei der nächsten Prüfung gefragt.";
+"BUY" = "KAUFEN";
+"SELL" = "VERKAUFEN";
+"HOLD" = "HALTEN";
+"WAIT" = "WARTEN";
