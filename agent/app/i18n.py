@@ -291,6 +291,25 @@ CATALOG: dict[str, L] = {
     ),
     "engine.order_booked": L("Order already booked", "Order bereits verbucht"),
     "engine.late_fill": L("Late fill of order {id}", "Nachträgliche Ausführung von Order {id}"),
+    "engine.holdings_mismatch": L(
+        "Books don't match the exchange: {booked} {base} booked, {held} {base} on the exchange · trading paused. "
+        "“Sell position now” sells what is there and writes off the rest.",
+        "Bestand stimmt nicht mit der Börse überein: {booked} {base} verbucht, {held} {base} auf der Börse · Handel pausiert. "
+        "„Position jetzt verkaufen“ verkauft, was da ist, und schreibt den Rest ab.",
+    ),
+    "engine.holdings_mismatch_event": L(
+        "Holdings check: {booked} {base} booked in positions, but the exchange holds only {held} {base} – trading paused",
+        "Bestandsprüfung: {booked} {base} in Positionen verbucht, aber die Börse hält nur {held} {base} – Handel pausiert",
+    ),
+    "engine.holdings_ok": L("Holdings check: {base} matches the exchange again", "Bestandsprüfung: {base} stimmt wieder mit der Börse überein"),
+    "engine.sell_less_available": L(
+        "Selling {available} {base} – the position says {booked} {base}, but only that much is available on the exchange",
+        "Verkaufe {available} {base} – die Position sagt {booked} {base}, aber nur so viel ist auf der Börse verfügbar",
+    ),
+    "engine.position_written_off": L(
+        "Written off: {qty} {base} (cost {cost}) were booked as a position but are not on the exchange – position closed without a sale",
+        "Abgeschrieben: {qty} {base} (Einstand {cost}) waren als Position verbucht, liegen aber nicht auf der Börse – Position ohne Verkauf geschlossen",
+    ),
     "engine.late_fill_booked": L(
         "Order {id}: the exchange executed {qty} {base} more than first reported – booked now",
         "Order {id}: die Börse hat {qty} {base} mehr ausgeführt als zuerst gemeldet – jetzt nachgebucht",

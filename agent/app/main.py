@@ -31,7 +31,7 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES
 from .strategies.ai import AiStrategy
 
-VERSION = "1.4.1"
+VERSION = "1.4.2"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 BALANCES_CACHE_SECONDS = 10
 

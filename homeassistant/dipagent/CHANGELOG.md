@@ -2,6 +2,25 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.2] – 2026-09-29
+
+### Added
+
+- **Holdings check.** Every 5 minutes (and right after every live fill) the agent compares the live positions it
+  has booked with the balances on the exchange. If the exchange holds less of a coin than the bots think they
+  own, every bot with a live position in that coin is flagged with an error event and stops trading – status
+  *"Books don't match the exchange … trading paused"* – until the books match again (e.g. after a late fill was
+  booked). Holding more than booked is fine.
+- **Write-off on manual close.** *Sell position now* on a flagged bot sells what the exchange holds and writes
+  off the rest with an error event (no trade is booked for coins that were never sold), so a wrong position can
+  always be cleaned up from the app.
+
+### Changed
+
+- An order is only booked once two consecutive reads of it agree on status and filled quantity; fill data that
+  is still moving right after "filled" is no longer booked. A sell that finds less available on the exchange
+  than the position says logs an error event with both numbers.
+
 ## [1.4.1] – 2026-09-29
 
 ### Fixed

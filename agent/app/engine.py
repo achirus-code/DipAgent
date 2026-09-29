@@ -37,6 +37,8 @@ TRANSIENT_BACKOFF_MS = 60_000
 ORDER_LOOKUP_GRACE_MS = 3 * 60_000
 # a "filled" order whose reported fill is still short of what we asked for: re-read it for this long
 FILL_CHECK_MS = 15 * 60_000
+# how often the booked live positions are compared with the balances on the exchange
+HOLDINGS_CHECK_MS = 5 * 60_000
 # how many symbols are fetched from the exchange concurrently during a tick
 MARKET_DATA_CONCURRENCY = 4
 # candles are re-fetched when a new candle starts or after this long, not on every tick
@@ -136,6 +138,7 @@ class Engine:
         self._candles = CandleCache()
         # last evaluation per bot; only persisted together with a state/status change (saves a write per tick)
         self._last_check: dict[int, int] = {}
+        self._holdings_checked_at = 0
         self._background: set[asyncio.Task] = set()
 
     # --- loop -------------------------------------------------------------
@@ -258,6 +261,7 @@ class Engine:
         views, errors = await self._market_views(sorted({b["symbol"] for b in relevant}))
         self.exchange_error = next(iter(errors.values()), None)
         self.last_tick = now_ms()
+        await self._verify_holdings(bots)
 
         for bot in bots:
             if not bot["enabled"]:
@@ -305,6 +309,13 @@ class Engine:
                     return
                 if state.get("fill_check") or self._sold_but_still_open(bot, state):
                     status = await self._complete_fill(bot, state) or status
+                if mismatch := state.get("holdings_mismatch"):
+                    # the exchange holds less than we booked – no trading until that is resolved (a late fill
+                    # gets booked above; otherwise "Sell position now" sells what is there and writes off the rest)
+                    base, _ = split_symbol(bot["symbol"])
+                    status = m("engine.holdings_mismatch", booked=qty(Decimal(mismatch["booked"])),
+                               held=qty(Decimal(mismatch["held"])), base=base)
+                    return
                 status = await self._evaluate(bot, state, view)
                 state.pop("retry_after", None)
             except Exception as exc:  # noqa: BLE001
@@ -476,13 +487,39 @@ class Engine:
             return self._record_sell(bot, state, pair, amount, gross - fee, price, fee, None, True, reason)
 
         balances = await self.exchange.balances()
-        available = balances.get(pair.base, (Decimal(0), Decimal(0)))[0]
+        available, total = balances.get(pair.base, (Decimal(0), Decimal(0)))
         amount = round_down(min(amount, available), pair.base_step)
+        manual = message_key(reason) == "engine.manual_close"
+        if manual and total + pair.min_order_size < position.qty:
+            # the coins are not on the exchange (whatever happened to them) – a manual close is the explicit
+            # decision to clean the books: sell what is there, write off the rest
+            missing = position.qty - max(total, Decimal(0))
+            if amount < pair.min_order_size:
+                return self._write_off(bot, state, pair, position, missing)
+            status = await self._track_order(bot, state, pair, await self._submit_order(bot, state, "sell", reason, base_size=amount))
+            if not state.get("pending_order") and state.get("position"):
+                return self._write_off(bot, state, pair, Position.from_state(state["position"]), missing)
+            return status
         if amount <= 0 or amount < pair.min_order_size:
             raise Problem("err.sell_below_min", qty=qty(amount), base=pair.base,
                           min=qty(pair.min_order_size), available=qty(available))
+        if available + pair.min_order_size < position.qty:
+            self.db.add_event(bot["id"], "error", m("engine.sell_less_available", booked=qty(position.qty),
+                                                    available=qty(available), base=pair.base))
         pending = await self._submit_order(bot, state, "sell", reason, base_size=amount)
         return await self._track_order(bot, state, pair, pending)
+
+    def _write_off(self, bot: dict, state: dict, pair: PairInfo, position: Position, missing: Decimal) -> Message:
+        """Drop the part of a position the exchange does not hold. No trade is booked – nothing was sold."""
+        missing = min(missing, position.qty)
+        state["position"] = None
+        state.pop("holdings_mismatch", None)
+        state.pop("fill_check", None)
+        msg = m("engine.position_written_off", qty=qty(missing), base=pair.base, cost=money(position.cost * missing / position.qty, pair.quote))
+        self.db.add_event(bot["id"], "error", msg)
+        log.error("Bot %s: %s", bot["name"], render(msg, "en"))
+        self._holdings_checked_at = 0
+        return msg
 
     async def _submit_order(
         self, bot: dict, state: dict, side: str, reason: Message,
@@ -519,11 +556,13 @@ class Engine:
         return pending
 
     async def _track_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict) -> Message:
-        result = None
+        result = previous = None
         for delay in ORDER_POLL_DELAYS:
             await asyncio.sleep(delay)
-            result = await self.exchange.get_order(pending["id"])
-            if result.terminal and not short_fill(pending, result):
+            previous, result = result, await self.exchange.get_order(pending["id"])
+            # book only what two consecutive reads agree on – fill data can still be moving right after "filled"
+            confirmed = previous is not None and (previous.status, previous.filled_qty) == (result.status, result.filled_qty)
+            if result.terminal and confirmed and not short_fill(pending, result):
                 return self._apply_order(bot, state, pair, pending, result)
         if result is not None and result.terminal:
             # Revolut X reported "filled" but the fill data still lags behind the order size – book what is
@@ -553,6 +592,45 @@ class Engine:
         if result.terminal and (not short_fill(pending, result) or overdue):
             return self._apply_order(bot, state, pair, pending, result)
         return None
+
+    async def _verify_holdings(self, bots: list[dict[str, Any]], force: bool = False) -> None:
+        """Compare the live positions we booked with what the exchange actually holds.
+
+        Whatever goes wrong in order handling ends up here: if the exchange holds less of a coin than the bots
+        think they own, every bot with a live position in that coin is flagged and stops trading. Holding *more*
+        is fine (coins the user keeps outside the bots)."""
+        live = [b for b in bots if bot_has_live_position(b)]
+        if not live or (not force and now_ms() - self._holdings_checked_at < HOLDINGS_CHECK_MS):
+            return
+        try:
+            balances = await self.exchange.balances()
+        except Exception as exc:  # noqa: BLE001 – checked again next time
+            log.warning("Holdings check skipped: %s", exc)
+            return
+        self._holdings_checked_at = now_ms()
+        booked: dict[str, Decimal] = defaultdict(Decimal)
+        for b in live:
+            booked[split_symbol(b["symbol"])[0]] += Position.from_state(b["state"]["position"]).qty
+        for b in live:
+            base, _ = split_symbol(b["symbol"])
+            held = balances.get(base, (Decimal(0), Decimal(0)))[1]
+            pair = await self.exchange.pair(b["symbol"])
+            tolerance = max(pair.min_order_size, booked[base] * Decimal("0.005"))
+            async with self._locks[b["id"]]:
+                bot = self.db.get_bot(b["id"])
+                if not bot:
+                    continue
+                state = bot["state"]
+                before = self._snapshot(bot)
+                if booked[base] - held > tolerance:
+                    if not state.get("holdings_mismatch"):
+                        state["holdings_mismatch"] = {"booked": str(booked[base]), "held": str(held), "since": now_ms()}
+                        msg = m("engine.holdings_mismatch_event", booked=qty(booked[base]), held=qty(held), base=base)
+                        self.db.add_event(bot["id"], "error", msg)
+                        log.error("Bot %s: %s", bot["name"], render(msg, "en"))
+                elif state.pop("holdings_mismatch", None):
+                    self.db.add_event(bot["id"], "info", m("engine.holdings_ok", base=base))
+                self._persist(bot, state, bot["status"], before)
 
     def _sold_but_still_open(self, bot: dict, state: dict) -> bool:
         """A position that survived a live sell: sells always close the whole position, so the exchange must have
@@ -633,6 +711,7 @@ class Engine:
             return m("engine.order_booked")
         if short_fill(pending, r):
             state["fill_check"] = {"order_id": r.order_id, "side": pending["side"], "until": now_ms() + FILL_CHECK_MS}
+        self._holdings_checked_at = 0  # verify the books against the exchange at the next tick
         if r.filled_qty <= 0:
             msg = (m("engine.order_failed_reason", status=r.status, reason=r.reject_reason) if r.reject_reason
                    else m("engine.order_failed", status=r.status))
@@ -731,7 +810,7 @@ class Engine:
             "paper": self.is_paper(bot),
             "paper_requested": bot["paper"],
             "status": render(bot["status"], lang),
-            "status_error": message_key(bot["status"]) in {"engine.error", "engine.order_not_found"}
+            "status_error": message_key(bot["status"]) in {"engine.error", "engine.order_not_found", "engine.holdings_mismatch"}
             or str(bot["status"]).startswith("Fehler"),
             "last_check": self._last_check.get(bot["id"], bot["last_check"]),
             "created_at": bot["created_at"],

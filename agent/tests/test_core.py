@@ -301,6 +301,68 @@ async def test_position_left_after_a_sell_is_reconciled(tmp_path: Path, monkeypa
     assert db.get_bot(bot_id)["state"]["position"] is None
 
 
+class HoldingsExchange(FakeExchange):
+    """Balances can be set per currency to simulate coins that are missing on the exchange."""
+
+    held: dict = {}
+
+    async def balances(self):
+        base = await super().balances()
+        return {**base, **{c: (v, v) for c, v in self.held.items()}}
+
+
+@pytest.mark.asyncio
+async def test_holdings_mismatch_pauses_trading_and_clears(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("app.engine.ORDER_POLL_DELAYS", (0, 0))
+    ex = HoldingsExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50, "stop_loss": 1}, True, False)
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"]
+
+    ex.held = {"ETH": Decimal(0)}  # the coins vanished from the exchange
+    ex.price = Decimal("1900")  # stop-loss would fire – but the books are wrong, so nothing is traded
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["holdings_mismatch"] and "trading paused" in render(bot["status"], "en")
+    assert len(db.list_trades(bot_id)) == 1
+    assert any(e["level"] == "error" and "Holdings check" in render(e["message"], "en") for e in db.list_events(bot_id, 10))
+
+    ex.held = {}  # back to normal (e.g. a transfer arrived) – the flag clears, trading resumes
+    engine._holdings_checked_at = 0
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert not bot["state"].get("holdings_mismatch") and bot["state"]["position"] is None  # stop-loss sold
+
+
+@pytest.mark.asyncio
+async def test_manual_close_writes_off_coins_missing_on_exchange(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("app.engine.ORDER_POLL_DELAYS", (0, 0))
+    ex = HoldingsExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50}, True, False)
+    await engine.tick()
+    ex.held = {"ETH": Decimal(0)}
+    await engine.close_position(bot_id)
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["position"] is None and not bot["state"].get("holdings_mismatch")
+    assert len(db.list_trades(bot_id)) == 1  # nothing was sold
+    assert any("Written off" in render(e["message"], "en") for e in db.list_events(bot_id, 10))
+
+
+@pytest.mark.asyncio
+async def test_fill_is_booked_only_after_two_matching_reads(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("app.engine.ORDER_POLL_DELAYS", (0, 0, 0, 0))
+    ex = LateFillExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50}, True, False)
+    ex.short_reads = 1  # first read of the buy is short, all later reads complete
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["position"] and not bot["state"].get("fill_check"), bot["status"]
+    assert Decimal(db.list_trades(bot_id)[0]["base_qty"]) > Decimal("0.02")  # the full 50 € buy, not a third
+
+
 def test_min_profit_cannot_be_negative():
     assert STRATEGIES["dip"].normalize({"min_profit": -1})["min_profit"] == 0
 
