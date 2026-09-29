@@ -9,8 +9,8 @@ enum Fmt {
     }
 
     /// Asset prices: more decimals for cheap coins (e.g. XRP at 0.5234 €).
-    static func price(_ value: Double, _ currency: String) -> String {
-        format(value, currency, digits: abs(value) < 10 ? 4 : 2, signed: false)
+    static func price(_ value: Double, _ currency: String, signed: Bool = false) -> String {
+        format(value, currency, digits: abs(value) < 10 ? 4 : 2, signed: signed)
     }
 
     private static func format(_ value: Double, _ currency: String, digits: Int, signed: Bool) -> String {

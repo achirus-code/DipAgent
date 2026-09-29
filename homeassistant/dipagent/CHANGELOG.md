@@ -11,6 +11,11 @@ All notable changes to DipAgent are documented here. The format follows [Keep a 
   cached for an hour) and adds today's value with the last seven days to Claude's market brief. In contrarian
   mode Claude is told to use it only below 25 (leaning towards patient buying) and above 75 (leaning towards
   taking profits) and to ignore it in between. If the index cannot be fetched, the brief goes out without it.
+- **Bot cards show how far the next trade is.** Instead of the coin price, a running bot's card leads with the
+  distance to its trigger in percent and in the quote currency (e.g. *−1.80 % · −42.00 $ to buy*, *+2.40 % · +58.00 $
+  to sell*, or the distance to the trailing stop), followed by the trigger price, the stop and the current price in
+  small print. Strategies without a fixed trigger (AI decides, the savings plan's next instalment) show their note.
+  Needs agent 1.12 – the agent now reports the prices each bot waits for.
 
 ## [1.11.0] – 2026-09-29
 

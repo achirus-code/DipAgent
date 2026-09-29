@@ -160,6 +160,17 @@ struct BotTargets: Codable, Equatable {
     }
 }
 
+/// How far the price still has to move until the bot trades – what the card shows first.
+struct BotGoal {
+    enum Kind { case buy, sell, trailingStart, trailingStop }
+
+    let kind: Kind
+    let target: Double
+    let change: Double // target minus current price, in the quote currency
+    let percent: Double // the same relative to the current price
+    let reached: Bool
+}
+
 struct Bot: Codable, Identifiable, Equatable {
     let id: Int
     let name: String
@@ -203,6 +214,30 @@ struct Bot: Codable, Identifiable, Equatable {
     }
 
     var totalPnl: Double { realizedPnl + (position?.unrealizedPnl ?? 0) }
+
+    /// The next trade trigger with a fixed price: the buy price while waiting, the sale (or the trailing stop) with a
+    /// position. Nil for strategies without one (AI decides, the savings plan's next instalment) or old agents.
+    var goal: BotGoal? {
+        guard let targets, let price = market?.price, price > 0 else { return nil }
+        let kind: BotGoal.Kind
+        let target: Double
+        if position == nil, let buy = targets.buyPrice {
+            kind = .buy
+            target = buy
+        } else if position != nil, let sell = targets.sellPrice {
+            // the trailing strategy first waits for the activation price above, then sells when the stop below is hit
+            kind = strategy == "trailing" ? (sell < price ? .trailingStop : .trailingStart) : .sell
+            target = sell
+        } else {
+            return nil
+        }
+        let reached: Bool
+        switch kind {
+        case .buy, .trailingStop: reached = price <= target
+        case .sell, .trailingStart: reached = price >= target
+        }
+        return BotGoal(kind: kind, target: target, change: target - price, percent: (target / price - 1) * 100, reached: reached)
+    }
 }
 
 struct Trade: Codable, Identifiable, Equatable {

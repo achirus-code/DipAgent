@@ -180,23 +180,9 @@ struct BotCard: View {
                 }
 
                 if bot.enabled {
-                    // What the bot waits for – the price itself is only the small line below
+                    // How far the price still has to move until the bot trades – the price itself is only the small line below
                     HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            if let targets = bot.targets, let line = targetLine(targets) {
-                                Text(line)
-                                    .font(.system(size: 12, weight: .medium)).monospacedDigit()
-                                    .lineLimit(1)
-                            } else if let market = bot.market {
-                                Text(Fmt.price(market.price, bot.quoteCurrency))
-                                    .font(.system(size: 12, weight: .medium)).monospacedDigit()
-                            }
-                            if let market = bot.market {
-                                Text(verbatim: bot.targets == nil ? "\(Fmt.pct(market.change24h)) 24h"
-                                                                  : "\(Fmt.price(market.price, bot.quoteCurrency)) · \(Fmt.pct(market.change24h)) 24h")
-                                    .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
-                            }
-                        }
+                        GoalLines(bot: bot)
                         Spacer()
                         PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
                     }
@@ -303,24 +289,6 @@ struct BotCard: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// "Buy at ≤ 2,350 €" while waiting, "Sell at ≥ 2,460 € · Stop 2,364 €" with a position – or the strategy's note.
-    private func targetLine(_ t: BotTargets) -> String? {
-        let q = bot.quoteCurrency
-        var parts: [String] = []
-        if bot.position == nil, let buy = t.buyPrice {
-            parts.append(String(localized: "Buy at ≤ \(Fmt.price(buy, q))"))
-        } else if bot.position != nil, let sell = t.sellPrice {
-            parts.append(String(localized: "Sell at ≥ \(Fmt.price(sell, q))"))
-        }
-        if let note = t.note, parts.isEmpty || (bot.position != nil && t.sellPrice != nil && bot.strategy == "trailing") {
-            parts.append(note)
-        }
-        if bot.position != nil, let stop = t.stopPrice {
-            parts.append(String(localized: "Stop \(Fmt.price(stop, q))"))
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
     private var deleteConfirmation: some View {
         VStack(spacing: 6) {
             Text(bot.position != nil ? "The open position stays in your account – delete anyway?" : "Really delete this bot?")
@@ -365,6 +333,74 @@ struct RunToggle: View {
         .labelsHidden()
         .disabled(busy)
         .help(bot.enabled ? Text("Stop bot") : Text("Start bot"))
+    }
+}
+
+/// "−1.80% · −42.00 $ to buy" first, then the trigger price, the stop and the current price in small print.
+/// Strategies without a fixed trigger show their note (or the price) instead.
+struct GoalLines: View {
+    let bot: Bot
+    var large = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: large ? 3 : 2) {
+            if let goal = bot.goal {
+                Text(headline(goal))
+                    .font(.system(size: large ? 17 : 12, weight: .semibold, design: large ? .rounded : .default))
+                    .foregroundStyle(goal.reached ? Color.accentColor : Color.primary)
+            } else if let note = bot.targets?.note {
+                Text(note).font(.system(size: large ? 17 : 12, weight: .medium, design: large ? .rounded : .default))
+            } else if let market = bot.market {
+                Text(Fmt.price(market.price, bot.quoteCurrency)).font(.system(size: 12, weight: .medium))
+            }
+            if let details {
+                Text(verbatim: details)
+                    .font(.system(size: large ? 11 : 10)).foregroundStyle(.secondary)
+                    .minimumScaleFactor(0.85)
+            }
+        }
+        .monospacedDigit()
+        .lineLimit(1)
+    }
+
+    private func headline(_ goal: BotGoal) -> String {
+        let q = bot.quoteCurrency
+        let pct = Fmt.pct(goal.percent), amount = Fmt.price(goal.change, q, signed: true)
+        switch (goal.kind, goal.reached) {
+        case (.buy, false): return String(localized: "\(pct) · \(amount) to buy")
+        case (.buy, true): return String(localized: "Buy price reached")
+        case (.sell, false): return String(localized: "\(pct) · \(amount) to sell")
+        case (.sell, true): return String(localized: "Sell price reached")
+        case (.trailingStart, false): return String(localized: "\(pct) · \(amount) until trailing starts")
+        case (.trailingStart, true): return String(localized: "Trailing starts")
+        case (.trailingStop, false): return String(localized: "\(pct) · \(amount) to the trailing stop")
+        case (.trailingStop, true): return String(localized: "Trailing stop reached")
+        }
+    }
+
+    /// Trigger price, stop and current price; the 24 h change only while the line has room for it.
+    private var details: String? {
+        guard let market = bot.market else { return nil }
+        let q = bot.quoteCurrency
+        var parts: [String] = []
+        if let goal = bot.goal {
+            switch goal.kind {
+            case .buy: parts.append(String(localized: "Buy at ≤ \(Fmt.price(goal.target, q))"))
+            case .sell: parts.append(String(localized: "Sell at ≥ \(Fmt.price(goal.target, q))"))
+            case .trailingStart: parts.append(String(localized: "Trailing from \(Fmt.price(goal.target, q))"))
+            case .trailingStop: parts.append(String(localized: "Trailing stop \(Fmt.price(goal.target, q))"))
+            }
+        }
+        if bot.position != nil, let stop = bot.targets?.stopPrice {
+            parts.append(String(localized: "Stop \(Fmt.price(stop, q))"))
+        }
+        if !parts.isEmpty || bot.targets?.note != nil {
+            parts.append(String(localized: "Price \(Fmt.price(market.price, q))"))
+        }
+        if parts.count < 3 {
+            parts.append(String(localized: "\(Fmt.pct(market.change24h)) 24h"))
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -513,7 +549,9 @@ struct BotDetailView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                if let market = bot.market {
+                if bot.enabled, bot.goal != nil || bot.targets?.note != nil {
+                    GoalLines(bot: bot, large: true)
+                } else if let market = bot.market {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(Fmt.price(market.price, bot.quoteCurrency))
                             .font(.system(size: 20, weight: .semibold, design: .rounded)).monospacedDigit()
