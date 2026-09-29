@@ -2,6 +2,26 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.9.0] – 2026-09-29
+
+### Added
+
+- **Blocked buys stay visible.** A buy signal skipped by the limits (capital, open positions, one per symbol) used
+  to be in the bot status for a single tick – *AI decides* signals once per check, so the skip was gone right
+  away. The engine now keeps the blocked buy in the bot state and reports it as a `hint` until the limits allow
+  it; the status then just says "Buy signal". The app shows the hint in orange on the bot card and in the
+  details, and posts a notification when a bot becomes blocked.
+- **AI decides: minimum confidence.** New per-bot parameter – buy and sell decisions below the threshold are not
+  executed and stay visible as "below the threshold, not executed" until the next check. Default 0 keeps every
+  decision executed. Claude is asked for an honestly calibrated confidence (50 = coin toss, 80+ = clear setup).
+
+### Fixed
+
+- **App: empty window on first open.** The SwiftUI settings scene opened an empty "DipAgent Settings" window the
+  first time the app was activated; the entry point is now plain AppKit.
+- **App: start tab.** The panel opens on *Bots*; only when the connection failed or is not configured it opens
+  on *Settings*. The choice is made when the panel first opens, not before the first connection attempt.
+
 ## [1.8.0] – 2026-09-29
 
 ### Added
