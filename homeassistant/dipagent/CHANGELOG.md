@@ -2,6 +2,23 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.11.0] – 2026-09-29
+
+### Added
+
+- **Statistics per trading mode.** The summary keeps paper and live results apart: the card shows the active
+  mode's numbers (result, realized, open, today, fees, trades), the other mode's result is a small footnote.
+  Open positions count in the mode they were bought in. Switching modes deletes nothing.
+- **App: prompt page.** The AI bot's "Additional instructions" are edited on their own page with a full-height
+  text area, character count and "Clear"; the editor shows a preview and an "Edit…" button.
+- **App: capital limit in the statistics.** What the bots may still invest and how much of the limit is in use –
+  so a new bot is not sized straight into the limit. The exchange balance became a small footnote.
+
+### Changed
+
+- **App: "Ask now"** is a small round button with a brain symbol and asks for confirmation before the extra
+  Claude call.
+
 ## [1.10.0] – 2026-09-29
 
 ### Added
