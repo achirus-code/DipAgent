@@ -2,6 +2,14 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.0] – 2026-09-29
+
+### Added
+
+- **AI decides: the model is selectable per bot** – Claude Opus 5 (~4 ct per check), Claude Sonnet 5
+  (~1.5 ct) or Claude Haiku 4.5 (~1 ct). New default is Sonnet 5; existing AI bots switch to it unless you
+  pick Opus in the bot editor.
+
 ## [1.6.0] – 2026-09-29
 
 ### Added
