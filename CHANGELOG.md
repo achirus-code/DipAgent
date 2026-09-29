@@ -2,6 +2,14 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.10.0] – 2026-09-29
+
+### Added
+
+- **AI decides: "Ask now".** A small button on the bot card gets a fresh decision from Claude right away instead
+  of waiting for the next check (`POST /bots/{id}/ask`). One extra Claude call; minimum confidence, cooldown,
+  limits and the no-loss rule apply as in a scheduled check, and the regular rhythm continues from that moment.
+
 ## [1.9.0] – 2026-09-29
 
 ### Added
