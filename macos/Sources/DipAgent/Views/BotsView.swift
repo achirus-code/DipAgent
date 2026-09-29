@@ -146,6 +146,7 @@ struct BotCard: View {
     let open: (Route?) -> Void
     @State private var hovering = false
     @State private var confirmingDelete = false
+    @State private var asking = false
     @State private var error: String?
 
     var body: some View {
@@ -190,10 +191,34 @@ struct BotCard: View {
                         PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
                     }
 
-                    HStack(alignment: .top, spacing: 8) {
-                        StatusLine(bot: bot)
-                        if bot.strategy == "ai" {
+                    StatusLine(bot: bot)
+                    if bot.strategy == "ai" {
+                        HStack(spacing: 6) {
                             Spacer(minLength: 0)
+                            // a fresh decision right now – one extra Claude call
+                            Button {
+                                asking = true; error = nil
+                                Task {
+                                    do { try await store.askClaude(bot) } catch { self.error = error.localizedDescription }
+                                    asking = false
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    if asking {
+                                        ProgressView().controlSize(.mini).frame(width: 10, height: 10)
+                                    } else {
+                                        Image(systemName: "arrow.clockwise")
+                                    }
+                                    Text("Ask now")
+                                }
+                                .font(.system(size: 10.5, weight: .medium))
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                                .foregroundStyle(Color.accentColor)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(asking || bot.pendingOrder)
+                            .help("Get a fresh decision from Claude right now (costs one check)")
                             Button { open(.bot(bot.id)) } label: {
                                 Label("Decisions", systemImage: "sparkles")
                                     .font(.system(size: 10.5, weight: .medium))
@@ -204,6 +229,7 @@ struct BotCard: View {
                             .buttonStyle(.plain)
                             .help("Claude's answers and how sure it was")
                         }
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 

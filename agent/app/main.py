@@ -466,6 +466,17 @@ async def discard_position(bot_id: int, lang: str = Depends(get_lang)) -> dict[s
     return _describe(bot_id, lang)
 
 
+@api.post("/bots/{bot_id}/ask")
+async def ask_claude_now(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, Any]:
+    """"AI decides" only: get a fresh decision from Claude right now instead of waiting for the next check."""
+    _bot_or_404(bot_id, lang)
+    try:
+        await engine.ask_now(bot_id)
+    except Problem as exc:
+        raise fail_with(409, lang, exc) from exc
+    return _describe(bot_id, lang)
+
+
 # --- history ---------------------------------------------------------------------------------
 
 

@@ -332,6 +332,9 @@ CATALOG: dict[str, L] = {
     "limit.capital": L("Capital limit: {invested} invested, max. {max}", "Kapital-Limit: {invested} investiert, max. {max}"),
     # --- errors
     "err.no_position": L("No open position", "Keine offene Position"),
+    "err.not_ai": L("Only an “AI decides” bot can ask Claude", "Nur ein „KI entscheidet“-Bot kann Claude fragen"),
+    "err.bot_stopped": L("The bot is stopped – start it first", "Der Bot ist gestoppt – zuerst starten"),
+    "err.no_market_data": L("No market data ({error})", "Keine Marktdaten ({error})"),
     "err.order_running": L("An order is already in progress", "Es läuft bereits eine Order"),
     "err.amount_below_min": L("Amount {amount} is below the minimum of {min}", "Betrag {amount} unter Mindestgröße {min}"),
     "err.insufficient": L(

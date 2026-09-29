@@ -388,6 +388,29 @@ class Engine:
                 self._persist(bot, state, status, before)
             return status
 
+    async def ask_now(self, bot_id: int) -> Message:
+        """"AI decides" only: forget the wait until the next check and evaluate the bot right away – one extra
+        Claude call. Everything else (cooldown, missing key, limits) applies as in a normal check."""
+        async with self._locks[bot_id]:
+            bot = self.db.get_bot(bot_id)
+            if not bot:
+                raise KeyError(bot_id)
+            if bot["strategy"] != "ai":
+                raise Problem("err.not_ai")
+            if not bot["enabled"]:
+                raise Problem("err.bot_stopped")
+            if bot["state"].get("pending_order"):
+                raise Problem("err.order_running")
+            before = self._snapshot(bot)
+            bot["state"].setdefault("ai", {})["next_at"] = 0
+            self._persist(bot, bot["state"], bot["status"], before)
+        views, errors = await self._market_views([bot["symbol"]])
+        view = views.get(bot["symbol"])
+        if view is None:
+            raise Problem("err.no_market_data", error=errors.get(bot["symbol"], "?"))
+        await self.process(bot_id, view)
+        return self.db.get_bot(bot_id)["status"]
+
     async def discard_position(self, bot_id: int) -> Message:
         """Drop a position from the books without selling – for a position that is wrong (e.g. booked from a
         short-reported fill) while the coins stay, or don't exist, on the exchange. No trade is booked."""

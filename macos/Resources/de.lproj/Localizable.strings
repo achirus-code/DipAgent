@@ -9,6 +9,8 @@
 /* AppStore.swift */
 "%@ buys %@" = "%@ kauft %@";
 "%@: buy blocked" = "%@: Kauf blockiert";
+"Ask now" = "Jetzt fragen";
+"Get a fresh decision from Claude right now (costs one check)" = "Jetzt eine neue Bewertung von Claude einholen (kostet eine Prüfung)";
 "%@ sells %@" = "%@ verkauft %@";
 "%@ %@ at %@" = "%@ %@ zu %@";
 "Result %@" = "Ergebnis %@";

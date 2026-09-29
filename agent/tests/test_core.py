@@ -10,7 +10,7 @@ from app.config import Settings
 from app.db import Database
 from app.engine import Engine
 from app.exchange import Candle, Exchange, MockExchange, OrderResult, PairInfo, Ticker
-from app.i18n import render
+from app.i18n import Problem, render
 from app.revolutx import RevolutXClient
 from app.strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell
 
@@ -150,6 +150,36 @@ async def test_trailing_stop_never_below_break_even():
 
 
 @pytest.mark.asyncio
+async def test_ai_ask_now_skips_the_wait(tmp_path: Path, monkeypatch):
+    from app.strategies.ai import AiDecision
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    calls = 0
+
+    async def fake_ask(brief, news, model):
+        nonlocal calls
+        calls += 1
+        return AiDecision(action="wait", confidence=55, reason_en="x", reason_de="x")
+
+    monkeypatch.setattr(STRATEGIES["ai"], "ask", fake_ask)
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 30}, True, True)
+    await engine.tick()
+    await engine.tick()
+    assert calls == 1  # within the interval Claude is not asked again …
+    status = await engine.ask_now(bot_id)  # … unless the user asks for it
+    assert calls == 2 and "Claude: wait (55 % sure)" in render(status, "en")
+    assert db.get_bot(bot_id)["state"]["ai"]["next_at"] > ex.now  # and the regular rhythm continues from now
+
+    dip_id = db.create_bot("Dip", "dip", "ETH-EUR", {}, True, True)
+    with pytest.raises(Problem):
+        await engine.ask_now(dip_id)
+    db.update_bot(bot_id, enabled=False)
+    with pytest.raises(Problem):
+        await engine.ask_now(bot_id)
+
+
 async def test_ai_minimum_confidence_holds_back_trades(tmp_path: Path, monkeypatch):
     from app.strategies.ai import AiDecision
 
