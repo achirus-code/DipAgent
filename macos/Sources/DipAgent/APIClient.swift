@@ -3,12 +3,15 @@ import Foundation
 enum APIError: LocalizedError {
     case invalidURL
     case unauthorized
+    /// The agent answered 404 for a route it doesn't have – it runs an older version than this app expects.
+    case outdatedAgent
     case http(Int, String)
 
     var errorDescription: String? {
         switch self {
         case .invalidURL: return String(localized: "Invalid agent address")
         case .unauthorized: return String(localized: "Invalid token – please check the settings")
+        case .outdatedAgent: return String(localized: "The agent doesn't know this function yet – update the agent (add-on or Docker image) to the latest version.")
         case .http(let code, let message): return message.isEmpty ? String(localized: "Agent error (\(String(code)))") : message
         }
     }
@@ -111,7 +114,12 @@ struct APIClient {
         let http = response as? HTTPURLResponse
         let code = http?.statusCode ?? 0
         if code == 401 { throw APIError.unauthorized }
-        guard (200..<300).contains(code) else { throw APIError.http(code, Self.detail(from: data)) }
+        guard (200..<300).contains(code) else {
+            let detail = Self.detail(from: data)
+            // FastAPI's plain "Not Found" means the route itself is missing (our own 404s carry a translated message)
+            if code == 404, detail == "Not Found" { throw APIError.outdatedAgent }
+            throw APIError.http(code, detail)
+        }
         return (data, http)
     }
 

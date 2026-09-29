@@ -24,7 +24,7 @@ IGNORE = {
     "EUR", "USD", "GBP", "CHF", "PLN", "PAPER", "LIVE", "Revolut X", "DipAgent", "English", "Deutsch", "System",
     "Authorization", "Accept", "Accept-Language", "Content-Type", "application/json",
     "GET", "POST", "PUT", "DELETE", "AppleLanguages", "LIVE", "Bots", "Trades", "Name", "Agent",
-    " · Paper", " (Paper)", " · ", "–", "App", "ETH-EUR", "-EUR", "apiToken",
+    " · Paper", " (Paper)", " · ", "–", "App", "ETH-EUR", "-EUR", "apiToken", "Not Found",
 }
 # lines that never contain UI text
 IGNORE_LINE = re.compile(

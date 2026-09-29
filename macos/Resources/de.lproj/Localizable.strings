@@ -252,3 +252,4 @@
 "The agent has no Anthropic API key yet – set ANTHROPIC_API_KEY in agent/.env or the add-on option “Anthropic API key”. Until then this bot only waits." = "Der Agent hat noch keinen Anthropic-API-Key – ANTHROPIC_API_KEY in agent/.env oder die Add-on-Option „Anthropic-API-Key“ setzen. Bis dahin wartet dieser Bot nur.";
 "Discard position (no sale)" = "Position verwerfen (kein Verkauf)";
 "Remove the position from the books without selling? Coins on the exchange stay there." = "Position ohne Verkauf aus der Buchhaltung entfernen? Coins auf der Börse bleiben dort.";
+"The agent doesn't know this function yet – update the agent (add-on or Docker image) to the latest version." = "Der Agent kennt diese Funktion noch nicht – Agent (Add-on oder Docker-Image) auf die neueste Version aktualisieren.";
