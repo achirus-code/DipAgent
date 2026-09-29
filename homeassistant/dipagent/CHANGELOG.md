@@ -2,6 +2,15 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.0] – 2026-09-29
+
+### Added
+
+- **Claude's decision history.** Every answer of an *AI decides* bot is kept (action, how sure Claude was, the
+  reason, price and open result at that moment; `GET /api/bots/{id}/decisions`). The bot view shows them as a
+  list with an action badge and a confidence bar, the bot card gets a *Decisions* button. The bot status is
+  now short – "Claude: hold (71 % sure) · next check in 12 min" – instead of carrying the whole reason.
+
 ## [1.5.0] – 2026-09-29
 
 ### Added
