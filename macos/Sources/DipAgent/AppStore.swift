@@ -96,6 +96,7 @@ final class AppStore {
 
     var menuBarSymbol: String {
         switch connection {
+        case .connecting: return "arrow.triangle.2.circlepath"
         case .failed: return "exclamationmark.triangle"
         case .connected where bots.contains { $0.position != nil }: return "chart.line.uptrend.xyaxis.circle.fill"
         default: return "chart.line.uptrend.xyaxis"

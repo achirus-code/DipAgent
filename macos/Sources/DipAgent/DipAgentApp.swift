@@ -19,6 +19,8 @@ struct DipAgentApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = AppStore()
     private var statusItem: NSStatusItem?
+    private var spinner: Timer?
+    private var spinAngle: CGFloat = 0
     private var panel: StatusPanel?
     private var outsideClickMonitor: Any?
     private var lastAutoClose = Date.distantPast
@@ -115,14 +117,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Keeps the menu bar icon in sync with the connection state.
+    /// Keeps the menu bar icon in sync with the connection state; while connecting the icon spins.
     private func observeIcon() {
         withObservationTracking {
-            let image = NSImage(systemSymbolName: store.menuBarSymbol, accessibilityDescription: "DipAgent")
-            image?.isTemplate = true
-            statusItem?.button?.image = image
+            let symbol = store.menuBarSymbol
+            let connecting = store.connection == .connecting
+            setSpinning(connecting, symbol: symbol)
+            if !connecting {
+                statusItem?.button?.image = Self.icon(symbol)
+            }
         } onChange: {
             Task { @MainActor [weak self] in self?.observeIcon() }
+        }
+    }
+
+    private static func icon(_ symbol: String, rotatedBy angle: CGFloat = 0) -> NSImage? {
+        guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: "DipAgent") else { return nil }
+        base.isTemplate = true
+        guard angle != 0 else { return base }
+        let size = NSSize(width: 18, height: 18) // the menu bar renders the symbol at this size anyway
+        let image = NSImage(size: size, flipped: false) { rect in
+            let transform = NSAffineTransform()
+            transform.translateX(by: rect.midX, yBy: rect.midY)
+            transform.rotate(byDegrees: -angle)
+            transform.translateX(by: -rect.midX, yBy: -rect.midY)
+            transform.concat()
+            base.draw(in: rect.insetBy(dx: 1, dy: 1))
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    /// Rotates the "connecting" symbol a full turn per second, 12 frames – cheap enough for a menu bar icon.
+    private func setSpinning(_ on: Bool, symbol: String) {
+        if on {
+            guard spinner == nil else { return }
+            spinAngle = 0
+            statusItem?.button?.image = Self.icon(symbol)
+            spinner = Timer.scheduledTimer(withTimeInterval: 1.0 / 12, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.spinAngle = (self.spinAngle + 30).truncatingRemainder(dividingBy: 360)
+                    self.statusItem?.button?.image = Self.icon(symbol, rotatedBy: self.spinAngle)
+                }
+            }
+        } else {
+            spinner?.invalidate()
+            spinner = nil
         }
     }
 }
