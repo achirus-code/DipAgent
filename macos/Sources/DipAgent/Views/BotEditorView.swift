@@ -49,6 +49,8 @@ struct BotEditorView: View {
     @State private var saving = false
     @State private var error: String?
     @State private var loaded = false
+    /// New bots start with the strategy choice; the settings come after (existing bots open on the settings).
+    @State private var choosingStrategy = false
 
     private var strategy: Strategy? { store.strategy(strategyKey) }
     private var quote: String { String(symbol.split(separator: "-").last ?? "EUR") }
@@ -71,12 +73,72 @@ struct BotEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: bot == nil ? "New bot" : "Edit bot", back: { close(nil) })
+            PageHeader(title: bot == nil ? "New bot" : "Edit bot", back: {
+                if choosingStrategy && bot == nil { close(nil) } else if choosingStrategy { choosingStrategy = false } else { close(nil) }
+            })
             Divider().opacity(0.5)
-            ScrollView {
+            if choosingStrategy {
+                strategyChoice
+            } else {
+                settings
+            }
+        }
+        .onAppear(perform: load)
+        .animation(.snappy(duration: 0.25), value: choosingStrategy)
+    }
+
+    // MARK: Step 1 – which kind of bot
+
+    /// One card per strategy with its description – picking one opens the settings.
+    private var strategyChoice: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel("What should the bot do?")
+                ForEach(store.strategies) { s in
+                    Button { select(s); choosingStrategy = false } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            IconTile(symbol: s.icon, colors: strategyColors(s.key), size: 36)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(s.name).font(.system(size: 13, weight: .semibold))
+                                Text(s.description)
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                                .padding(.top, 10)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.primary.opacity(strategyKey == s.key && bot != nil ? 0.09 : 0.045))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(strategyKey == s.key && bot != nil ? Color.accentColor : .clear, lineWidth: 1.5)
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(14)
+        }
+        .scrollIndicators(.never)
+    }
+
+    // MARK: Step 2 – the settings
+
+    private var settings: some View {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    strategySummary
                     basics
-                    strategyPicker
                     rules
                     costCheck
                     mode
@@ -103,10 +165,8 @@ struct BotEditorView: View {
                     .disabled(saving)
                 }
                 .padding(14)
-            }
-            .scrollIndicators(.never)
         }
-        .onAppear(perform: load)
+        .scrollIndicators(.never)
     }
 
     // MARK: Sections
@@ -133,57 +193,43 @@ struct BotEditorView: View {
                     }
                 }
                 .disabled(hasPosition)
-                if hasPosition {
-                    Text("Trading pair and strategy are locked while a position is open.")
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
-                }
             }
         }
     }
 
-    private var strategyPicker: some View {
+    /// The chosen strategy at the top of the settings, with a way back to the choice.
+    private var strategySummary: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel("Strategy")
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                ForEach(store.strategies) { s in
-                    Button { select(s) } label: {
-                        HStack(spacing: 8) {
-                            IconTile(symbol: s.icon, colors: strategyColors(s.key), size: 26)
-                            Text(s.name)
-                                .font(.system(size: 11.5, weight: .semibold))
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(2)
-                            Spacer(minLength: 0)
+            Card {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        IconTile(symbol: strategy?.icon ?? "cpu", colors: strategyColors(strategyKey), size: 30)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(strategy?.name ?? strategyKey).font(.system(size: 12.5, weight: .semibold))
+                            if let strategy {
+                                Text(strategy.description)
+                                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
                         }
-                        .padding(8)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .fill(Color.primary.opacity(strategyKey == s.key ? 0.09 : 0.04))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .strokeBorder(strategyKey == s.key ? Color.accentColor : .clear, lineWidth: 1.5)
-                        )
-                        .contentShape(Rectangle())
+                        Spacer()
+                        if !hasPosition {
+                            Button("Change") { choosingStrategy = true }
+                                .controlSize(.small)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(hasPosition && s.key != strategyKey)
+                    if hasPosition {
+                        Text("Trading pair and strategy are locked while a position is open.")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    if strategyKey == "ai", store.status?.aiConfigured == false {
+                        Label("The agent has no Anthropic API key yet – set ANTHROPIC_API_KEY in agent/.env or the add-on option “Anthropic API key”. Until then this bot only waits.", systemImage: "key.fill")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-            }
-            if let strategy {
-                Text(strategy.description)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 4)
-            }
-            if strategyKey == "ai", store.status?.aiConfigured == false {
-                Label("The agent has no Anthropic API key yet – set ANTHROPIC_API_KEY in agent/.env or the add-on option “Anthropic API key”. Until then this bot only waits.", systemImage: "key.fill")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 4)
             }
         }
     }
@@ -374,6 +420,7 @@ struct BotEditorView: View {
         } else if let s = store.strategy(strategyKey) {
             values = defaults(for: s)
             paper = !(store.status?.liveTradingAllowed ?? false) // new bots follow the global mode
+            choosingStrategy = true
         }
     }
 

@@ -266,3 +266,5 @@
 "SELL" = "VERKAUFEN";
 "HOLD" = "HALTEN";
 "WAIT" = "WARTEN";
+"What should the bot do?" = "Was soll der Bot tun?";
+"Change" = "Ändern";
