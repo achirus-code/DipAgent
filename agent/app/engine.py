@@ -35,6 +35,8 @@ ERROR_BACKOFF_MS = 5 * 60_000
 TRANSIENT_BACKOFF_MS = 60_000
 # an order whose placement response got lost and that can't be found at the exchange after this long stops the bot
 ORDER_LOOKUP_GRACE_MS = 3 * 60_000
+# a "filled" order whose reported fill is still short of what we asked for: re-read it for this long
+FILL_CHECK_MS = 15 * 60_000
 # how many symbols are fetched from the exchange concurrently during a tick
 MARKET_DATA_CONCURRENCY = 4
 # candles are re-fetched when a new candle starts or after this long, not on every tick
@@ -73,6 +75,18 @@ def is_transient(exc: Exception) -> bool:
     return isinstance(exc, (httpx.HTTPError, ConnectionError, TimeoutError)) or (
         isinstance(exc, RevolutXError) and exc.transient
     )
+
+
+def short_fill(pending: dict, r: OrderResult) -> bool:
+    """A terminal order whose reported fill is smaller than what we asked for. Revolut X can report "filled" a
+    moment before the fill data is complete; booking that would leave part of the position unbooked."""
+    if r.status != "filled":
+        return False
+    if pending.get("base_size"):
+        return r.filled_qty < Decimal(pending["base_size"])
+    if pending.get("quote_size"):
+        return r.filled_amount < Decimal(pending["quote_size"]) * Decimal("0.98")
+    return False
 
 
 def backoff_for(exc: Exception) -> int:
@@ -289,6 +303,8 @@ class Engine:
                         return
                 if int(state.get("retry_after") or 0) > now_ms():
                     return
+                if state.get("fill_check") or self._sold_but_still_open(bot, state):
+                    status = await self._complete_fill(bot, state) or status
                 status = await self._evaluate(bot, state, view)
                 state.pop("retry_after", None)
             except Exception as exc:  # noqa: BLE001
@@ -484,6 +500,7 @@ class Engine:
             "reason": reason,
             "placed_at": now_ms(),
             "quote_size": str(quote_size) if quote_size is not None else None,
+            "base_size": str(base_size) if base_size is not None else None,
         }
         state["pending_order"] = pending
         self.db.update_bot(bot["id"], state=state)
@@ -502,11 +519,16 @@ class Engine:
         return pending
 
     async def _track_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict) -> Message:
+        result = None
         for delay in ORDER_POLL_DELAYS:
             await asyncio.sleep(delay)
             result = await self.exchange.get_order(pending["id"])
-            if result.terminal:
+            if result.terminal and not short_fill(pending, result):
                 return self._apply_order(bot, state, pair, pending, result)
+        if result is not None and result.terminal:
+            # Revolut X reported "filled" but the fill data still lags behind the order size – book what is
+            # there and keep re-reading the order (see _complete_fill) so the rest is booked as well
+            return self._apply_order(bot, state, pair, pending, result)
         return m("engine.waiting_for_order")
 
     async def _reconcile(self, bot: dict, state: dict) -> Message | None:
@@ -528,9 +550,66 @@ class Engine:
                 if exc.status == 404 and overdue:  # the exchange doesn't know the id (any more)
                     return self._abandon_order(bot, state, pending)
                 raise
-        if result.terminal:
+        if result.terminal and (not short_fill(pending, result) or overdue):
             return self._apply_order(bot, state, pair, pending, result)
         return None
+
+    def _sold_but_still_open(self, bot: dict, state: dict) -> bool:
+        """A position that survived a live sell: sells always close the whole position, so the exchange must have
+        reported the fill short (seen on Revolut X right after placing) – re-read that order."""
+        position = state.get("position")
+        if not position or position.get("paper"):
+            return False
+        last = next(iter(self.db.list_trades(bot["id"], 1)), None)
+        if not last or last["side"] != "sell" or not last["order_id"] or last["paper"]:
+            return False
+        if last["created_at"] < int(position.get("opened_at") or 0):
+            return False
+        order_id = last["order_id"].split("#")[0]
+        if state.get("fill_checked") == order_id:  # already re-read to the end
+            return False
+        state["fill_check"] = {"order_id": order_id, "side": "sell", "until": last["created_at"] + FILL_CHECK_MS}
+        return True
+
+    async def _complete_fill(self, bot: dict, state: dict) -> Message | None:
+        """Re-read a short-filled order and book what the exchange executed on top of what we booked."""
+        check = state["fill_check"]
+        order_id = check["order_id"]
+        try:
+            r = await self.exchange.get_order(order_id)
+        except RevolutXError as exc:
+            if exc.status == 404:
+                state.pop("fill_check", None)
+                state["fill_checked"] = order_id
+            return None
+        pair = await self.exchange.pair(bot["symbol"])
+        booked = self.db.booked_for_order(order_id)
+        fee_base = r.fee if r.fee_currency == pair.base else Decimal(0)
+        fee_quote = r.fee if r.fee_currency == pair.quote else Decimal(0)
+        fee_in_quote = fee_quote + fee_base * r.avg_price
+        if check["side"] == "sell":
+            qty_total, amount_total = r.filled_qty + fee_base, r.filled_amount - fee_quote
+        else:
+            qty_total, amount_total = r.filled_qty - fee_base, r.filled_amount + fee_quote
+        more_qty = qty_total - Decimal(str(booked["qty"]))
+        status: Message | None = None
+        if more_qty >= pair.base_step:
+            more_amount = amount_total - Decimal(str(booked["amount"]))
+            more_fee = max(fee_in_quote - Decimal(str(booked["fee"])), Decimal(0))
+            late_id = f"{order_id}#{int(booked['n']) + 1}"
+            reason = m("engine.late_fill", id=order_id)
+            if check["side"] == "sell" and state.get("position"):
+                status = self._record_sell(bot, state, pair, more_qty, more_amount, r.avg_price, more_fee, late_id, False, reason)
+            elif check["side"] == "buy":
+                status = self._record_buy(bot, state, pair, more_qty, more_amount, r.avg_price, more_fee, late_id, False, reason)
+            self.db.add_event(bot["id"], "info", m("engine.late_fill_booked", id=order_id, qty=qty(more_qty), base=pair.base))
+        if r.terminal and (more_qty >= pair.base_step or now_ms() > check["until"]):
+            state.pop("fill_check", None)
+            state["fill_checked"] = order_id
+        elif now_ms() > check["until"]:
+            state.pop("fill_check", None)
+            state["fill_checked"] = order_id
+        return status
 
     def _abandon_order(self, bot: dict, state: dict, pending: dict) -> Message:
         """An order we can't find for minutes: don't guess. Drop it and stop the bot so nobody buys twice.
@@ -552,6 +631,8 @@ class Engine:
         state.pop("retry_after", None)  # the "order unclear" error is resolved with the order
         if self.db.trade_exists(r.order_id):  # never book the same exchange order twice
             return m("engine.order_booked")
+        if short_fill(pending, r):
+            state["fill_check"] = {"order_id": r.order_id, "side": pending["side"], "until": now_ms() + FILL_CHECK_MS}
         if r.filled_qty <= 0:
             msg = (m("engine.order_failed_reason", status=r.status, reason=r.reject_reason) if r.reject_reason
                    else m("engine.order_failed", status=r.status))

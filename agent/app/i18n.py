@@ -290,6 +290,11 @@ CATALOG: dict[str, L] = {
         "Paper-Position geschlossen – Live-Handel aktiviert",
     ),
     "engine.order_booked": L("Order already booked", "Order bereits verbucht"),
+    "engine.late_fill": L("Late fill of order {id}", "Nachträgliche Ausführung von Order {id}"),
+    "engine.late_fill_booked": L(
+        "Order {id}: the exchange executed {qty} {base} more than first reported – booked now",
+        "Order {id}: die Börse hat {qty} {base} mehr ausgeführt als zuerst gemeldet – jetzt nachgebucht",
+    ),
     "engine.order_failed": L("Order {status}", "Order {status}"),
     "engine.order_failed_reason": L("Order {status}: {reason}", "Order {status}: {reason}"),
     "engine.bought": L("Bought {qty} {base} for {amount}", "Gekauft: {qty} {base} für {amount}"),

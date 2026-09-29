@@ -231,6 +231,76 @@ async def test_ai_sell_at_a_loss_is_held_back(tmp_path: Path, monkeypatch):
     assert bot["state"]["position"] and "never sells at a loss" in render(bot["status"], "en")
 
 
+class LateFillExchange(FakeExchange):
+    """Reports a sell as filled with only part of the quantity for the first `short_reads` reads."""
+
+    short_reads = 2
+
+    async def get_order(self, order_id):
+        full = await super().get_order(order_id)
+        if full.filled_qty and self.short_reads > 0:
+            self.short_reads -= 1
+            part = full.filled_qty / 3
+            return OrderResult(full.order_id, "filled", part, part * full.avg_price, full.avg_price, Decimal(0), "EUR")
+        return full
+
+
+@pytest.mark.asyncio
+async def test_short_reported_fill_keeps_polling(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("app.engine.ORDER_POLL_DELAYS", (0, 0, 0, 0))
+    ex = LateFillExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50}, True, False)
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"]
+    ex.short_reads = 2  # the sell is reported short twice, then complete
+    await engine.close_position(bot_id)
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["position"] is None, bot["status"]
+    assert len(db.list_trades(bot_id)) == 2
+
+
+@pytest.mark.asyncio
+async def test_short_fill_is_completed_on_a_later_tick(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("app.engine.ORDER_POLL_DELAYS", (0, 0))
+    ex = LateFillExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50}, True, False)
+    await engine.tick()
+    ex.short_reads = 5  # short for the whole polling window – a third gets booked, the rest stays open
+    await engine.close_position(bot_id)
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["position"] and bot["state"]["fill_check"]
+    assert len(db.list_trades(bot_id)) == 2
+    ex.short_reads = 0  # the exchange now reports the complete fill
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["position"] is None, bot["status"]
+    trades = db.list_trades(bot_id)
+    assert [t["side"] for t in trades] == ["sell", "sell", "buy"] and trades[0]["order_id"].endswith("#2")
+    sold = sum(Decimal(t["base_qty"]) for t in trades if t["side"] == "sell")
+    assert abs(sold - Decimal(trades[2]["base_qty"])) < Decimal("0.0000001")  # only dust below the base step is left
+    assert any("more than first reported" in render(e["message"], "en") for e in db.list_events(bot_id, 10))
+
+
+@pytest.mark.asyncio
+async def test_position_left_after_a_sell_is_reconciled(tmp_path: Path, monkeypatch):
+    """Bookkeeping from an older agent: a sell was booked short and the rest of the position is still open."""
+    monkeypatch.setattr("app.engine.ORDER_POLL_DELAYS", (0, 0))
+    ex = LateFillExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50}, True, False)
+    await engine.tick()
+    ex.short_reads = 5
+    await engine.close_position(bot_id)
+    state = db.get_bot(bot_id)["state"]
+    state.pop("fill_check")  # as if booked by a version without the fill check
+    db.update_bot(bot_id, state=state)
+    ex.short_reads = 0
+    await engine.tick()
+    assert db.get_bot(bot_id)["state"]["position"] is None
+
+
 def test_min_profit_cannot_be_negative():
     assert STRATEGIES["dip"].normalize({"min_profit": -1})["min_profit"] == 0
 

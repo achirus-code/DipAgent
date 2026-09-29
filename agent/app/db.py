@@ -207,6 +207,16 @@ class Database:
     def trade_exists(self, order_id: str) -> bool:
         return self._one("SELECT 1 AS x FROM trades WHERE order_id = ?", (order_id,)) is not None
 
+    def booked_for_order(self, order_id: str) -> dict[str, Any]:
+        """Quantity, amount and fee already booked for an exchange order (late fills are booked as ``id#2`` …)."""
+        row = self._one(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(CAST(base_qty AS REAL)), 0) AS qty, "
+            "COALESCE(SUM(CAST(quote_amount AS REAL)), 0) AS amount, COALESCE(SUM(CAST(fee AS REAL)), 0) AS fee "
+            "FROM trades WHERE order_id = ? OR order_id LIKE ?",
+            (order_id, f"{order_id}#%"),
+        )
+        return row or {"n": 0, "qty": 0.0, "amount": 0.0, "fee": 0.0}
+
     def add_trade(self, **t: Any) -> int:
         t.setdefault("created_at", now_ms())
         t["reason"] = dump(t.get("reason") or "")

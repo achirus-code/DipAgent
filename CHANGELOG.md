@@ -2,6 +2,18 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.1] – 2026-09-29
+
+### Fixed
+
+- **Short-reported fills.** Revolut X can report a market order as "filled" a moment before its fill data is
+  complete; the agent then booked only the first part (a manual close of 0.00128 ETH was booked as 0.00043 ETH,
+  the rest stayed open as a position that no longer existed on the exchange). Now an order whose reported fill
+  is smaller than the requested size is re-read while polling, and if it is still short after that, the agent
+  keeps re-reading it for up to 15 minutes and books the remainder as a late fill (`order-id#2`). Positions that
+  are still open after a live sell – bookkeeping from earlier versions – are reconciled the same way on the next
+  tick.
+
 ## [1.4.0] – 2026-09-29
 
 ### Added
