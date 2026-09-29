@@ -2,6 +2,14 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.0] – 2026-09-29
+
+### Added
+
+- **AI decides: additional instructions.** An optional free-text field in the bot's rules – your own rules or
+  focus for Claude (e.g. "only buy on strong dips") – is sent with every check. New parameter type `text` for
+  strategies; the app renders it as a multi-line field.
+
 ## [1.7.1] – 2026-09-29
 
 ### Changed
