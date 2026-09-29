@@ -2,6 +2,14 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.1] – 2026-09-29
+
+### Changed
+
+- AI decides: the model options are just the model names; the app shows the estimated cost per check and per
+  month under the field. Without an Anthropic API key on the agent the *AI decides* card in the bot editor is
+  greyed out with a note.
+
 ## [1.7.0] – 2026-09-29
 
 ### Added
