@@ -159,19 +159,23 @@ async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, mon
     answers: list[str] = []
     briefs = []
 
-    async def fake_ask(brief, news):
+    models = []
+
+    async def fake_ask(brief, news, model):
         briefs.append(brief)
+        models.append(model)
         return AiDecision(action=answers.pop(0), confidence=80, reason_en="test", reason_de="Test")
 
     monkeypatch.setattr(strategy, "ask", fake_ask)
     ex = FakeExchange("2000", "1970")
     db, engine = make_engine(tmp_path, ex)
-    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 30}, True, True)
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 30, "model": "claude-haiku-4-5"}, True, True)
 
     answers.append("wait")
     await engine.tick()
     assert db.get_bot(bot_id)["state"].get("position") is None
     assert briefs[-1].position is None and "24h" in briefs[-1].changes
+    assert models == ["claude-haiku-4-5"]  # the bot's model reaches the API call
     # within the interval Claude is not asked again – the last answer is repeated
     await engine.tick()
     assert len(briefs) == 1 and "Claude: wait (80 % sure)" in render(db.get_bot(bot_id)["status"], "en")
@@ -218,7 +222,7 @@ async def test_ai_sell_at_a_loss_is_held_back(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     answers = ["buy", "sell"]
 
-    async def fake_ask(brief, news):
+    async def fake_ask(brief, news, model):
         return AiDecision(action=answers.pop(0), confidence=90, reason_en="x", reason_de="x")
 
     monkeypatch.setattr(STRATEGIES["ai"], "ask", fake_ask)
@@ -447,6 +451,12 @@ async def test_discard_position_forgets_it_without_a_trade(tmp_path: Path, monke
     assert [t["side"] for t in db.list_trades(bot_id)] == ["buy"]  # nothing sold
     with pytest.raises(Exception):
         await engine.discard_position(bot_id)  # no position any more
+
+
+def test_ai_model_defaults_to_sonnet_and_rejects_unknown():
+    assert STRATEGIES["ai"].normalize({})["model"] == "claude-sonnet-5"
+    assert STRATEGIES["ai"].normalize({"model": "gpt-9"})["model"] == "claude-sonnet-5"
+    assert STRATEGIES["ai"].normalize({"model": "claude-opus-5"})["model"] == "claude-opus-5"
 
 
 def test_min_profit_cannot_be_negative():

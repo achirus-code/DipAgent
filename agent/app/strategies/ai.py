@@ -18,11 +18,13 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from ..i18n import L, dur, m, pct
-from .base import Buy, Context, Decision, Param, Sell, Strategy, cooldown_left
+from .base import Buy, Context, Decision, Option, Param, Sell, Strategy, cooldown_left
 
 log = logging.getLogger("dipagent")
 
-MODEL = "claude-opus-5"
+DEFAULT_MODEL = "claude-sonnet-5"
+# Haiku 4.5 is an older generation: no effort control, no adaptive thinking, basic web search tool
+LEGACY_MODELS = {"claude-haiku-4-5"}
 # the Anthropic SDK also accepts an OAuth token; both end up here as environment variables
 API_KEY_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
 RETRY_AUTH_MS = 60 * 60_000
@@ -117,6 +119,13 @@ class AiStrategy(Strategy):
     icon = "sparkles"
     params = [
         Param("amount", L("Amount per buy", "Betrag pro Kauf"), "money", 50.0, min=1),
+        Param("model", L("Model", "Modell"), "select", DEFAULT_MODEL,
+              L("Every check costs about 1 to 4 cents depending on the model.", "Jede Prüfung kostet je nach Modell etwa 1 bis 4 Cent."),
+              options=[
+                  Option("claude-opus-5", L("Claude Opus 5 – best judgement, ~4 ct per check", "Claude Opus 5 – bestes Urteil, ~4 ct je Prüfung")),
+                  Option("claude-sonnet-5", L("Claude Sonnet 5 – good and 3× cheaper, ~1.5 ct", "Claude Sonnet 5 – gut und 3× günstiger, ~1,5 ct")),
+                  Option("claude-haiku-4-5", L("Claude Haiku 4.5 – fastest and cheapest, ~1 ct", "Claude Haiku 4.5 – am schnellsten und günstigsten, ~1 ct")),
+              ]),
         Param("ai_interval", L("Ask Claude every", "Claude fragen alle"), "int", 30,
               L("Minutes between two decisions. Shorter = more responsive, but every check costs money.",
                 "Minuten zwischen zwei Entscheidungen. Kürzer = reagiert schneller, aber jede Prüfung kostet Geld."),
@@ -145,12 +154,11 @@ class AiStrategy(Strategy):
             self._client = anthropic.AsyncAnthropic(timeout=120.0, max_retries=2)
         return self._client
 
-    async def ask(self, brief: MarketBrief, news: bool) -> AiDecision:
+    async def ask(self, brief: MarketBrief, news: bool, model: str = DEFAULT_MODEL) -> AiDecision:
         """One decision from Claude. Overridden in tests."""
         request: dict[str, Any] = dict(
-            model=MODEL,
+            model=model,
             max_tokens=4000,
-            output_config={"effort": "medium"},
             system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             messages=[{
                 "role": "user",
@@ -161,8 +169,11 @@ class AiStrategy(Strategy):
             }],
             output_format=AiDecision,
         )
+        if model not in LEGACY_MODELS:
+            request["output_config"] = {"effort": "medium"}
         if news:
-            request["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 3}]
+            tool_type = "web_search_20250305" if model in LEGACY_MODELS else "web_search_20260209"
+            request["tools"] = [{"type": tool_type, "name": "web_search", "max_uses": 3}]
         response = await self._get_client().messages.parse(**request)
         if response.stop_reason == "refusal" or response.parsed_output is None:
             raise AiUnavailable(f"no decision (stop_reason={response.stop_reason})")
@@ -249,7 +260,7 @@ class AiStrategy(Strategy):
 
         state["next_at"] = ctx.now + int(p["ai_interval"]) * 60_000
         try:
-            decision = await self.ask(await self.brief(ctx), bool(p["news"]))
+            decision = await self.ask(await self.brief(ctx), bool(p["news"]), str(p["model"]))
         except anthropic.AuthenticationError:
             state["next_at"] = ctx.now + RETRY_AUTH_MS
             log.error("AI bot %s: Anthropic API key rejected", market.symbol)
