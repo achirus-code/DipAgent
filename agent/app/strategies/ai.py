@@ -81,9 +81,14 @@ class MarketBrief:
     position: dict[str, Any] | None
     amount: float
     stop_loss: float
+    owner_instructions: str = ""  # optional extra rules from the bot owner
 
     def to_text(self) -> str:
-        return json.dumps(self.__dict__, ensure_ascii=False, default=float, indent=1)
+        data = {k: v for k, v in self.__dict__.items() if k != "owner_instructions"}
+        text = json.dumps(data, ensure_ascii=False, default=float, indent=1)
+        if self.owner_instructions:
+            text += "\n\nAdditional instructions from the bot owner (follow them within the rules above):\n" + self.owner_instructions
+        return text
 
 
 def _price_at(candles: list, interval: int, t0: int) -> Decimal | None:
@@ -131,6 +136,9 @@ class AiStrategy(Strategy):
         Param("news", L("Consider news", "Nachrichten einbeziehen"), "bool", False,
               L("Claude may search the web for current news and market sentiment before deciding (costs a bit more).",
                 "Claude darf vor der Entscheidung im Web nach aktuellen Nachrichten und Marktstimmung suchen (kostet etwas mehr).")),
+        Param("instructions", L("Additional instructions", "Zusätzliche Anweisungen"), "text", "",
+              L("Optional. Your own rules or focus for Claude, e.g. “only buy on strong dips” – sent with every check.",
+                "Optional. Eigene Regeln oder Schwerpunkte für Claude, z. B. „nur bei starken Dips kaufen“ – wird bei jeder Prüfung mitgeschickt.")),
         Param("stop_loss", L("Stop-loss", "Stop-Loss"), "percent", 0.0,
               L("Sell at this loss. 0 = off.", "Verkauf bei so viel Verlust. 0 = aus."), min=0, max=90, step=0.5),
         Param("cooldown_minutes", L("Pause after selling", "Pause nach Verkauf"), "int", 60,
@@ -226,6 +234,7 @@ class AiStrategy(Strategy):
             position=position,
             amount=float(p["amount"]),
             stop_loss=float(p["stop_loss"]),
+            owner_instructions=str(p.get("instructions") or ""),
         )
 
     # --- strategy ---------------------------------------------------------------

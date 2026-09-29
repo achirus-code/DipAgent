@@ -34,7 +34,7 @@ class Option:
 class Param:
     key: str
     label: L
-    type: str  # number | percent | money | int | bool | select
+    type: str  # number | percent | money | int | bool | select | text
     default: Any
     help: L | None = None
     min: float | None = None
@@ -45,6 +45,8 @@ class Param:
 
     def coerce(self, value: Any) -> Any:
         try:
+            if self.type == "text":
+                return "" if value is None else str(value).strip()[:2000]
             if self.type == "bool":
                 v: Any = value if isinstance(value, bool) else str(value).lower() in {"1", "true", "yes"}
             elif self.type == "int":

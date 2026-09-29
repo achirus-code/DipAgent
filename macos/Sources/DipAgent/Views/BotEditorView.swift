@@ -15,6 +15,8 @@ enum ParamFormatting {
             return value.bool ? String(localized: "Yes") : String(localized: "No")
         case "select":
             return param.options?.first { $0.value == value.string }?.label ?? value.string
+        case "text":
+            return value.string.isEmpty ? "–" : value.string
         default:
             let number = value.double ?? 0
             // "0 = off" style hints in the (already localized) help text describe what zero means
@@ -492,10 +494,19 @@ struct ParamField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
+            if param.type == "text" {
+                // free text gets the full width below its label
                 Text(param.label).font(.system(size: 11.5, weight: .medium))
-                Spacer(minLength: 4)
-                control
+                TextField("", text: Binding(get: { value.string }, set: { value = .string($0) }), axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(2...6)
+                    .font(.system(size: 11))
+            } else {
+                HStack(spacing: 8) {
+                    Text(param.label).font(.system(size: 11.5, weight: .medium))
+                    Spacer(minLength: 4)
+                    control
+                }
             }
             if let help = param.help, !help.isEmpty {
                 Text(help)
