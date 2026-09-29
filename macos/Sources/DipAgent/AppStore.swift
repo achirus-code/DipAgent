@@ -59,11 +59,39 @@ final class AppStore {
     private var pollTask: Task<Void, Never>?
     private var lastSeenTradeId: Int?
 
+    /// Seconds until the next reconnect attempt while the agent is unreachable (5 s, doubling up to 60 s).
+    private var retryDelay: Double = 5
+
     init() {
         // after "Disconnect" the app stays disconnected until the user connects again
         if !serverURL.isEmpty && !token.isEmpty && !UserDefaults.standard.bool(forKey: "userDisconnected") {
             Task { await connect() }
         }
+        // the Mac wakes up (lid opened): the network needs a moment, then refresh or reconnect right away
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                await self?.refreshNow()
+            }
+        }
+    }
+
+    /// Refresh when connected, otherwise try to reconnect immediately – used on wake-up and when the panel opens.
+    func refreshNow() async {
+        guard !serverURL.isEmpty, !token.isEmpty, !UserDefaults.standard.bool(forKey: "userDisconnected") else { return }
+        retryDelay = 5
+        if connection == .connected {
+            await refresh()
+        } else if connection != .connecting {
+            await handshake()
+            startPolling() // restart the loop so the next attempt is due in `retryDelay`, not in a minute
+        }
+    }
+
+    /// Like refreshNow, but only if the data is older than a few seconds (the panel opens often).
+    func refreshIfStale() {
+        if connection == .connected, let lastUpdate, Date().timeIntervalSince(lastUpdate) < 10 { return }
+        Task { await refreshNow() }
     }
 
     var menuBarSymbol: String {
@@ -86,8 +114,17 @@ final class AppStore {
         await connect()
     }
 
+    /// User-triggered (or first) connect: handshake, then the polling loop keeps the connection alive.
     func connect() async {
         pollTask?.cancel()
+        retryDelay = 5
+        await handshake()
+        startPolling() // also while failed: the loop keeps retrying
+    }
+
+    /// One connection attempt: status, strategies, pairs, then a first refresh. Never touches the polling
+    /// task – the loop itself calls this, and cancelling the loop from inside would abort the request.
+    private func handshake() async {
         guard !serverURL.isEmpty, !token.isEmpty else {
             connection = .notConfigured
             return
@@ -100,13 +137,12 @@ final class AppStore {
             strategies = try await client.get("/strategies")
             pairs = (try? await client.get("/pairs")) ?? []
             connection = .connected
+            retryDelay = 5
             UserDefaults.standard.set(false, forKey: "userDisconnected")
             await refresh()
-            startPolling()
             if notificationsEnabled { requestNotificationPermission() }
         } catch {
             connection = .failed(error.localizedDescription)
-            startPolling() // keep retrying in the background
         }
     }
 
@@ -118,19 +154,22 @@ final class AppStore {
         bots = []; trades = []; summary = nil; status = nil; balances = []; limits = nil; exchangeInfo = nil
     }
 
+    /// Connected: refresh every `refreshInterval`. Unreachable: reconnect after `retryDelay` (5 s, then doubling
+    /// up to 60 s) – so the app is back a few seconds after the agent restarts or the network returns.
     private func startPolling() {
         pollTask?.cancel()
         guard !serverURL.isEmpty, !token.isEmpty else { return }
-        let interval = refreshInterval
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(interval))
-                guard let self, !Task.isCancelled else { return }
+                guard let self else { return }
+                let delay = self.connection == .connected ? self.refreshInterval : self.retryDelay
+                try? await Task.sleep(for: .seconds(delay))
+                guard !Task.isCancelled else { return }
                 if self.connection == .connected {
                     await self.refresh()
                 } else {
-                    await self.connect()
-                    return
+                    await self.handshake()
+                    if self.connection != .connected { self.retryDelay = min(self.retryDelay * 2, 60) }
                 }
             }
         }
