@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from ..i18n import L, dur, m, pct
-from .base import Buy, Context, Decision, Option, Param, Sell, Strategy, cooldown_left
+from .base import Buy, Context, Decision, Option, Param, Sell, Strategy, cooldown_left, multi_trade_params
 
 
 class DipStrategy(Strategy):
@@ -18,6 +18,7 @@ class DipStrategy(Strategy):
         "und verkauft, wenn sich der Kurs wieder erholt hat (z. B. 24h-Veränderung ≥ 0 %) oder das Gewinnziel erreicht ist.",
     )
     icon = "arrow.down.right.circle"
+    multi_trades = True
     params = [
         Param("amount", L("Amount per buy", "Betrag pro Kauf"), "money", 50.0,
               L("How much of the quote currency is invested per buy.", "Wie viel in der Quote-Währung pro Kauf investiert wird."), min=1),
@@ -47,6 +48,7 @@ class DipStrategy(Strategy):
         Param("cooldown_minutes", L("Pause after selling", "Pause nach Verkauf"), "int", 60,
               L("Minutes to wait after a sale before buying again.", "Minuten Wartezeit nach einem Verkauf, bevor erneut gekauft wird."),
               min=0, max=10080, unit="min"),
+        *multi_trade_params(),
     ]
 
     async def evaluate(self, ctx: Context) -> Decision:

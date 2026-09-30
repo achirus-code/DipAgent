@@ -6,6 +6,15 @@ All notable changes to DipAgent are documented here. The format follows [Keep a 
 
 ### Added
 
+- **Several trades per bot.** Dip buyer, Rebound + trailing stop and Price zones get *Max. open trades* (default 1 –
+  existing bots behave as before) and *Distance between trades*: the bot may buy again while earlier trades are
+  open, but only once the price is that far below the lowest open entry. Each trade has its own entry, target and
+  stop and is sold on its own. Every trade counts towards *Max. open positions* and the capital limit. Positions
+  stored by older versions are taken over as one trade.
+- **App: open trades on the card and in the bot view.** The card shows *Open trades 2/3* with one line per trade
+  (value, result, its target); the bot view has a card per trade with *Sell this trade now*. The headline shows the
+  distance to the next trade. The editor shows how much can be invested at the same time.
+
 - **App: quit button** at the top right of the panel. It asks first – the bots keep trading on the agent – with a
   "Don't ask again" checkbox; *Settings → Ask before quitting* turns the question back on.
 

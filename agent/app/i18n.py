@@ -278,6 +278,11 @@ CATALOG: dict[str, L] = {
     "engine.live_close_failed": L("Live position could not be sold: {error}", "Live-Position konnte nicht verkauft werden: {error}"),
     "engine.order_running_no_buy": L("Order in progress – no further buy", "Order läuft bereits – kein weiterer Kauf"),
     "engine.position_open_no_buy": L("Position already open – no second buy", "Position bereits offen – kein zweiter Kauf"),
+    "engine.trade_spacing": L(
+        "Buy signal – next trade only at ≤ {price} (distance to the open trades)",
+        "Kaufsignal – nächster Trade erst bei ≤ {price} (Abstand zu den offenen Trades)",
+    ),
+    "engine.trades_open": L("{open}/{max} trades open · {status}", "{open}/{max} Trades offen · {status}"),
     "engine.mode_changed_paper": L(
         "Paper position open, mode was changed – selling only",
         "Paper-Position offen, Modus wurde geändert – nur noch Verkauf",

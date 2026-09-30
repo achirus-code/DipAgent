@@ -1,5 +1,7 @@
 from ..i18n import register
-from .base import Buy, Context, Decision, MarketView, Param, Position, Sell, Strategy
+from .base import (
+    Buy, Context, Decision, MarketView, Param, Position, Sell, Strategy, has_position, open_positions, store_positions,
+)
 from .ai import AiStrategy
 from .dip import DipStrategy
 from .others import DcaStrategy, PriceZoneStrategy, ReboundTrailingStrategy
@@ -22,4 +24,7 @@ __all__ = [
     "Position",
     "Sell",
     "Strategy",
+    "has_position",
+    "open_positions",
+    "store_positions",
 ]

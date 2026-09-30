@@ -296,7 +296,8 @@ struct BotEditorView: View {
                 SectionLabel("Rules")
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
-                        ForEach(strategy.params) { param in
+                        // the distance between trades only matters when there can be more than one
+                        ForEach(strategy.params.filter { $0.key != "trade_spacing" || (values["max_trades"]?.double ?? 1) > 1 }) { param in
                             ParamField(
                                 param: param,
                                 value: Binding(
@@ -360,6 +361,9 @@ struct BotEditorView: View {
         case ("zones", "sell_above"):
             guard let sell = num(key), let buy = num("buy_below"), buy > 0, sell > 0 else { return nil }
             return profit(net((sell / buy - 1) * 100)) { String(localized: "Planned profit ≈ \($0) after fees") }
+        case (_, "max_trades"):
+            guard let trades = num(key), trades > 1 else { return nil }
+            return (String(localized: "Up to \(Fmt.money(amount * trades, quote)) invested at the same time"), .secondary)
         case (_, "stop_loss"):
             guard let pct = num(key), pct > 0 else { return (String(localized: "No stop-loss – the loss is not limited"), .red) }
             let loss = -(amount * pct / 100) - TradeCostCheck.roundTripFee(amount: amount, quote: quote, feeRate: feeRate)

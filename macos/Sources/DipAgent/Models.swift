@@ -116,7 +116,9 @@ struct Summary: Codable {
     }
 }
 
-struct BotPosition: Codable, Equatable {
+/// One open trade – or, as `Bot.position`, all of a bot's trades summed up.
+struct BotPosition: Codable, Equatable, Identifiable {
+    let id: String? // agent 1.13+; a bot can hold several trades at once
     let qty: Double
     let cost: Double
     let entryPrice: Double
@@ -125,10 +127,16 @@ struct BotPosition: Codable, Equatable {
     let unrealizedPnl: Double
     let unrealizedPct: Double
     let paper: Bool?
+    // per trade (agent 1.13+): the price its sale waits for, its stop, or the strategy's note
+    let sellPrice: Double?
+    let stopPrice: Double?
+    let note: String?
 
     enum CodingKeys: String, CodingKey {
-        case qty, cost, value, paper
+        case id, qty, cost, value, paper, note
         case entryPrice = "entry_price"
+        case sellPrice = "sell_price"
+        case stopPrice = "stop_price"
         case openedAt = "opened_at"
         case unrealizedPnl = "unrealized_pnl"
         case unrealizedPct = "unrealized_pct"
@@ -190,7 +198,9 @@ struct Bot: Codable, Identifiable, Equatable {
     let lastCheck: Int64?
     let createdAt: Int64
     let pendingOrder: Bool
-    let position: BotPosition?
+    let position: BotPosition? // all open trades summed up
+    let positions: [BotPosition]? // the open trades one by one (agent 1.13+)
+    let maxTrades: Int? // how many trades the bot may hold at once (agent 1.13+)
     let realizedPnl: Double
     let tradesCount: Int
     let wins: Int
@@ -198,7 +208,8 @@ struct Bot: Codable, Identifiable, Equatable {
     let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, wins, losses, market
+        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market
+        case maxTrades = "max_trades"
         case strategyName = "strategy_name"
         case strategyIcon = "strategy_icon"
         case baseCurrency = "base_currency"
@@ -214,13 +225,20 @@ struct Bot: Codable, Identifiable, Equatable {
 
     var totalPnl: Double { realizedPnl + (position?.unrealizedPnl ?? 0) }
 
+    /// The open trades one by one – older agents only send the single position.
+    var openTrades: [BotPosition] { positions ?? (position.map { [$0] } ?? []) }
+
+    /// True when the bot may hold more than one trade (or does) – the card then lists them.
+    var tradesMode: Bool { (maxTrades ?? 1) > 1 || openTrades.count > 1 }
+
     /// The next trade trigger with a fixed price: the buy price while waiting, the sale (or the trailing stop) with a
     /// position. Nil for strategies without one (AI decides, the savings plan's next instalment) or old agents.
     var goal: BotGoal? {
         guard let targets, let price = market?.price, price > 0 else { return nil }
         let kind: BotGoal.Kind
         let target: Double
-        if position == nil, let buy = targets.buyPrice {
+        // a buy price comes only while the bot may open another trade
+        if let buy = targets.buyPrice {
             kind = .buy
             target = buy
         } else if position != nil, let sell = targets.sellPrice {

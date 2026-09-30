@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from ..i18n import L, dur, m, money, num, pct
-from .base import Buy, Context, Decision, Param, Sell, Strategy, cooldown_left
+from .base import Buy, Context, Decision, Param, Sell, Strategy, cooldown_left, multi_trade_params
 
 COOLDOWN_LABEL = L("Pause after selling", "Pause nach Verkauf")
 STOP_LOSS_OFF = L("0 = off.", "0 = aus.")
@@ -19,6 +19,7 @@ class PriceZoneStrategy(Strategy):
         "Kauft, wenn der Kurs unter einen festen Preis fällt, und verkauft über einem Zielpreis.",
     )
     icon = "arrow.up.and.down.square"
+    multi_trades = True
     params = [
         Param("amount", L("Amount per buy", "Betrag pro Kauf"), "money", 50.0, min=1),
         Param("buy_below", L("Buy below price", "Kaufen unter Preis"), "money", 0.0,
@@ -28,6 +29,7 @@ class PriceZoneStrategy(Strategy):
         Param("stop_price", L("Stop-loss price", "Stop-Loss-Preis"), "money", 0.0,
               L("Sell if the price drops below. 0 = off.", "Verkauf, falls der Kurs darunter fällt. 0 = aus."), min=0),
         Param("cooldown_minutes", COOLDOWN_LABEL, "int", 30, min=0, max=10080, unit="min"),
+        *multi_trade_params(),
     ]
 
     async def evaluate(self, ctx: Context) -> Decision:
@@ -115,6 +117,7 @@ class ReboundTrailingStrategy(Strategy):
         "läuft ein Trailing-Stop mit, der Gewinne absichert, solange der Kurs weiter steigt.",
     )
     icon = "chart.line.uptrend.xyaxis"
+    multi_trades = True
     params = [
         Param("amount", L("Amount per buy", "Betrag pro Kauf"), "money", 50.0, min=1),
         Param("lookback_hours", L("High of the last", "Hoch der letzten"), "int", 48,
@@ -127,6 +130,7 @@ class ReboundTrailingStrategy(Strategy):
                 "Verkauf, wenn der Kurs so weit vom Höchststand seit Kauf fällt."), min=0.1, max=50, step=0.1),
         Param("stop_loss", L("Stop-loss", "Stop-Loss"), "percent", 0.0, STOP_LOSS_OFF, min=0, max=90, step=0.5),
         Param("cooldown_minutes", COOLDOWN_LABEL, "int", 60, min=0, max=10080, unit="min"),
+        *multi_trade_params(),
     ]
 
     async def evaluate(self, ctx: Context) -> Decision:

@@ -224,7 +224,9 @@ struct BotCard: View {
                     }
                 }
 
-                if let position = bot.position {
+                if bot.tradesMode, !bot.openTrades.isEmpty {
+                    TradesStrip(bot: bot)
+                } else if let position = bot.position {
                     PositionStrip(bot: bot, position: position)
                 }
 
@@ -366,6 +368,7 @@ struct GoalLines: View {
     private func headline(_ goal: BotGoal) -> String {
         let pct = Fmt.pct(goal.percent)
         switch (goal.kind, goal.reached) {
+        case (.buy, false) where !bot.openTrades.isEmpty: return String(localized: "\(pct) to the next trade")
         case (.buy, false): return String(localized: "\(pct) to buy")
         case (.buy, true): return String(localized: "Buy price reached")
         case (.sell, false): return String(localized: "\(pct) to sell")
@@ -474,6 +477,70 @@ struct PositionStrip: View {
     }
 }
 
+/// Several open trades on the card: the count and their result, then one line per trade.
+struct TradesStrip: View {
+    let bot: Bot
+
+    var body: some View {
+        let trades = bot.openTrades
+        let live = trades.contains { $0.paper == false }
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                (live ? Text("Open live trades \(String(trades.count))/\(String(bot.maxTrades ?? trades.count))")
+                      : Text("Open trades \(String(trades.count))/\(String(bot.maxTrades ?? trades.count))"))
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(live ? Color.red : .secondary)
+                Spacer()
+                PnLText(value: trades.reduce(0) { $0 + $1.unrealizedPnl }, currency: bot.quoteCurrency,
+                        font: .system(size: 11, weight: .semibold))
+            }
+            ForEach(Array(trades.enumerated()), id: \.offset) { index, trade in
+                OpenTradeRow(bot: bot, trade: trade, number: index + 1)
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.accentColor.opacity(0.08)))
+    }
+}
+
+/// "1  Value 251.20 € · +1.20 %      Target 2,460 €"
+struct OpenTradeRow: View {
+    let bot: Bot
+    let trade: BotPosition
+    let number: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(verbatim: "\(number)")
+                .font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+                .frame(width: 14, height: 14)
+                .background(Circle().fill(Color.primary.opacity(0.08)))
+            Text("Value \(Fmt.money(trade.value, bot.quoteCurrency))")
+                .font(.system(size: 10.5, weight: .medium))
+            Text(Fmt.pct(trade.unrealizedPct))
+                .font(.system(size: 10, weight: .medium)).foregroundStyle(trade.unrealizedPct.pnlColor)
+            Spacer(minLength: 4)
+            if let line = Self.targetText(trade, bot: bot) {
+                Text(verbatim: line).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .monospacedDigit()
+    }
+
+    /// The trade's own goal: its sale price, else its stop, else the strategy's note.
+    static func targetText(_ trade: BotPosition, bot: Bot) -> String? {
+        let q = bot.quoteCurrency
+        if let sell = trade.sellPrice, let price = bot.market?.price, price > 0 {
+            let label = bot.strategy == "trailing" && sell < price
+                ? String(localized: "Trailing stop \(Fmt.price(sell, q))")
+                : String(localized: "Target \(Fmt.price(sell, q))")
+            return "\(label) (\(Fmt.pct((sell / price - 1) * 100)))"
+        }
+        if let stop = trade.stopPrice { return String(localized: "Stop \(Fmt.price(stop, q))") }
+        return trade.note
+    }
+}
+
 // MARK: - Detail
 
 struct BotDetailView: View {
@@ -483,8 +550,8 @@ struct BotDetailView: View {
     @State private var events: [BotEvent] = []
     @State private var decisions: [AiDecision] = []
     @State private var error: String?
-    /// "Sell position now" failed – only then the escape hatch "discard without a sale" is offered.
-    @State private var sellFailed = false
+    /// "Sell position now" failed (for this trade id, or "position") – only then "discard without a sale" is offered.
+    @State private var sellFailed: String?
 
     var body: some View {
         if let bot = store.bots.first(where: { $0.id == botId }) {
@@ -502,7 +569,11 @@ struct BotDetailView: View {
                         if let error {
                             Text(error).font(.system(size: 11)).foregroundStyle(.red)
                         }
-                        if let position = bot.position { positionCard(bot, position) }
+                        if bot.tradesMode, !bot.openTrades.isEmpty {
+                            tradesSection(bot)
+                        } else if let position = bot.position {
+                            positionCard(bot, position)
+                        }
                         stats(bot)
                         if bot.strategy == "ai" { claudeDecisions }
                         parameters(bot)
@@ -574,38 +645,64 @@ struct BotDetailView: View {
     private func positionCard(_ bot: Bot, _ position: BotPosition) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel("Open position")
-            Card {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        detail("Amount", "\(Fmt.qty(position.qty)) \(bot.baseCurrency)")
-                        detail("Entry", Fmt.price(position.entryPrice, bot.quoteCurrency))
-                        detail("Invested", Fmt.money(position.cost, bot.quoteCurrency))
-                    }
-                    HStack {
-                        detail("Value", Fmt.money(position.value, bot.quoteCurrency))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Result").font(.system(size: 10)).foregroundStyle(.secondary)
-                            HStack(spacing: 4) {
-                                PnLText(value: position.unrealizedPnl, currency: bot.quoteCurrency)
-                                Text(Fmt.pct(position.unrealizedPct)).font(.system(size: 10)).foregroundStyle(position.unrealizedPct.pnlColor)
+            Card { positionContent(bot, position, tradeId: nil) }
+        }
+    }
+
+    /// Several trades: one card each, every trade can be sold on its own.
+    private func tradesSection(_ bot: Bot) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel("Open trades \(String(bot.openTrades.count))/\(String(bot.maxTrades ?? bot.openTrades.count))")
+            ForEach(Array(bot.openTrades.enumerated()), id: \.offset) { index, trade in
+                Card {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Trade \(String(index + 1))").font(.system(size: 11, weight: .semibold))
+                            Spacer()
+                            if let line = OpenTradeRow.targetText(trade, bot: bot) {
+                                Text(verbatim: line).font(.system(size: 10.5)).foregroundStyle(.secondary).monospacedDigit()
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        detail("Since", Date(ms: position.openedAt).formatted(.relative(presentation: .named)))
+                        positionContent(bot, trade, tradeId: trade.id ?? "")
                     }
-                    ConfirmButton(title: "Sell position now", confirmTitle: "Really sell at the market price?", icon: "arrow.up.right.circle") {
-                        do { try await store.closePosition(bot); error = nil; sellFailed = false } catch {
-                            self.error = error.localizedDescription
-                            sellFailed = true
-                        }
+                }
+            }
+        }
+    }
+
+    /// Amount, entry, value, result – and the sale. `tradeId` nil = the bot's only position (older agents).
+    private func positionContent(_ bot: Bot, _ position: BotPosition, tradeId: String?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                detail("Amount", "\(Fmt.qty(position.qty)) \(bot.baseCurrency)")
+                detail("Entry", Fmt.price(position.entryPrice, bot.quoteCurrency))
+                detail("Invested", Fmt.money(position.cost, bot.quoteCurrency))
+            }
+            HStack {
+                detail("Value", Fmt.money(position.value, bot.quoteCurrency))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Result").font(.system(size: 10)).foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        PnLText(value: position.unrealizedPnl, currency: bot.quoteCurrency)
+                        Text(Fmt.pct(position.unrealizedPct)).font(.system(size: 10)).foregroundStyle(position.unrealizedPct.pnlColor)
                     }
-                    if sellFailed {
-                        // the sale didn't go through – for a position that is wrong in the books (e.g. after a
-                        // short-reported fill) the way out is to forget it without selling
-                        ConfirmButton(title: "Discard position (no sale)", confirmTitle: "Remove the position from the books without selling? Coins on the exchange stay there.", icon: "xmark.bin", tint: .orange) {
-                            do { try await store.discardPosition(bot); error = nil; sellFailed = false } catch { self.error = error.localizedDescription }
-                        }
-                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                detail("Since", Date(ms: position.openedAt).formatted(.relative(presentation: .named)))
+            }
+            let key = tradeId ?? "position"
+            ConfirmButton(title: tradeId == nil ? "Sell position now" : "Sell this trade now",
+                          confirmTitle: "Really sell at the market price?", icon: "arrow.up.right.circle") {
+                do { try await store.closePosition(bot, positionId: tradeId); error = nil; sellFailed = nil } catch {
+                    self.error = error.localizedDescription
+                    sellFailed = key
+                }
+            }
+            if sellFailed == key {
+                // the sale didn't go through – for a position that is wrong in the books (e.g. after a
+                // short-reported fill) the way out is to forget it without selling
+                ConfirmButton(title: "Discard position (no sale)", confirmTitle: "Remove the position from the books without selling? Coins on the exchange stay there.", icon: "xmark.bin", tint: .orange) {
+                    do { try await store.discardPosition(bot, positionId: tradeId); error = nil; sellFailed = nil } catch { self.error = error.localizedDescription }
                 }
             }
         }

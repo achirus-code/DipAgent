@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal
@@ -87,6 +88,12 @@ class Position:
     peak: Decimal
     buys: int = 1
     paper: bool = True  # bought with simulated or real money – sells always use the same mode
+    id: str = ""  # a bot can hold several trades at once – each is sold on its own
+    order_id: str | None = None  # the live buy order that opened it (a late fill of that order is added here)
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            self.id = uuid.uuid4().hex[:8]
 
     @property
     def entry_price(self) -> Decimal:
@@ -119,6 +126,8 @@ class Position:
             "peak": str(self.peak),
             "buys": self.buys,
             "paper": self.paper,
+            "id": self.id,
+            "order_id": self.order_id,
         }
 
     @classmethod
@@ -128,7 +137,42 @@ class Position:
         return cls(
             dec(raw["qty"]), dec(raw["cost"]), int(raw["opened_at"]), dec(raw["peak"]),
             int(raw.get("buys", 1)), bool(raw.get("paper", True)),
+            str(raw.get("id") or "p1"), raw.get("order_id"),
         )
+
+
+def open_positions(state: dict[str, Any]) -> list[Position]:
+    """The open trades of a bot, oldest first. Before 1.13 a bot held at most one, stored under "position"."""
+    raw = state.get("positions")
+    if raw is None and state.get("position"):
+        raw = [state["position"]]
+    return [p for p in (Position.from_state(r) for r in raw or []) if p]
+
+
+def store_positions(state: dict[str, Any], positions: list[Position]) -> None:
+    state.pop("position", None)
+    state["positions"] = [p.to_state() for p in positions]
+
+
+def has_position(state: dict[str, Any]) -> bool:
+    return bool(state.get("positions") or state.get("position"))
+
+
+def multi_trade_params() -> list[Param]:
+    """Several trades at once – each buy is its own trade with its own entry and is sold on its own."""
+    return [
+        Param("max_trades", L("Max. open trades", "Max. offene Trades"), "int", 1,
+              L("How many trades the bot may hold at the same time. Each buy is its own trade with its own entry, "
+                "target and stop, and is sold on its own. 1 = one trade at a time.",
+                "Wie viele Trades der Bot gleichzeitig halten darf. Jeder Kauf ist ein eigener Trade mit eigenem "
+                "Einstieg, Ziel und Stop und wird einzeln verkauft. 1 = immer nur ein Trade."), min=1, max=20),
+        Param("trade_spacing", L("Distance between trades", "Abstand zwischen Trades"), "percent", 2.0,
+              L("With several trades: another one only when the price is at least this far below the lowest entry "
+                "of the open trades – so they don't all buy at the same price.",
+                "Bei mehreren Trades: ein weiterer erst, wenn der Kurs mindestens so weit unter dem niedrigsten "
+                "Einstieg der offenen Trades liegt – damit nicht alle zum gleichen Kurs kaufen."),
+              min=0, max=50, step=0.1),
+    ]
 
 
 Message = dict  # an i18n message, see app.i18n.m()
@@ -251,6 +295,8 @@ class Strategy:
     params: list[Param] = []
     # False = at most one buy per position; the engine refuses any further buy while a position is open
     accumulates: bool = False
+    # True = offers "Max. open trades": the bot may hold several positions (trades) at once, each sold on its own
+    multi_trades: bool = False
 
     def normalize(self, raw: dict[str, Any] | None) -> dict[str, Any]:
         raw = raw or {}

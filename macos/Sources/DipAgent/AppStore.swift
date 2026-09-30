@@ -296,9 +296,10 @@ final class AppStore {
         await refresh()
     }
 
-    func closePosition(_ bot: Bot) async throws {
+    /// Sells one trade (`positionId`) or all of the bot's trades at market.
+    func closePosition(_ bot: Bot, positionId: String? = nil) async throws {
         guard let client else { return }
-        let _: Bot = try await client.post("/bots/\(bot.id)/close")
+        let _: Bot = try await client.post("/bots/\(bot.id)/close", query: positionId.map { ["position_id": $0] } ?? [:])
         await refresh()
     }
 
@@ -310,9 +311,9 @@ final class AppStore {
     }
 
     /// Removes the position from the agent's books without selling anything.
-    func discardPosition(_ bot: Bot) async throws {
+    func discardPosition(_ bot: Bot, positionId: String? = nil) async throws {
         guard let client else { return }
-        let _: Bot = try await client.post("/bots/\(bot.id)/discard")
+        let _: Bot = try await client.post("/bots/\(bot.id)/discard", query: positionId.map { ["position_id": $0] } ?? [:])
         await refresh()
     }
 

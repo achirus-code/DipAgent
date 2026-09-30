@@ -13,6 +13,12 @@ from app.exchange import Candle, Exchange, MockExchange, OrderResult, PairInfo, 
 from app.i18n import Problem, render
 from app.revolutx import RevolutXClient
 from app.strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell
+from app.strategies import open_positions as trades_of
+
+def pos(bot):
+    """The bot's first open trade (as stored) or None."""
+    positions = trades_of(bot["state"])
+    return positions[0].to_state() if positions else None
 
 HOUR = 3_600_000
 
@@ -94,16 +100,16 @@ async def test_target_rules_never_sell_at_a_loss(tmp_path: Path):
     db, engine = make_engine(tmp_path, ex)
     bot_id = db.create_bot("Tiny", "dip", "ETH-EUR", {"amount": 2, "sell_mode": "profit", "take_profit": 0.1}, True, True)
     await engine.tick()
-    position = db.get_bot(bot_id)["state"]["position"]
+    position = pos(db.get_bot(bot_id))
     assert position
     ex.price = Decimal("1976.5")  # +0.33 % gross ≥ target, but 0.01 € fee on a 2 € sale = 0.5 %
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"], bot["status"]
+    assert pos(bot), bot["status"]
     assert "never sells at a loss" in render(bot["status"], "en")
     ex.price = Decimal("2000")  # +1.5 %: clearly above cost + fee
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"] is None
+    assert pos(db.get_bot(bot_id)) is None
     assert Decimal(db.list_trades(bot_id)[0]["pnl"]) > 0
 
 
@@ -115,7 +121,7 @@ async def test_stop_loss_may_sell_at_a_loss(tmp_path: Path):
     await engine.tick()
     ex.price = Decimal("1900")  # −3.5 %
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"] is None
+    assert pos(db.get_bot(bot_id)) is None
     assert Decimal(db.list_trades(bot_id)[0]["pnl"]) < 0
 
 
@@ -197,7 +203,7 @@ async def test_ai_minimum_confidence_holds_back_trades(tmp_path: Path, monkeypat
     confidences.append(62)  # Claude wants to buy, but is not sure enough
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert bot["state"].get("position") is None
+    assert pos(bot) is None
     assert render(bot["status"], "de") == "Claude: kaufen (62 % sicher) · unter der Schwelle von 80 %, nicht ausgeführt · nächste Prüfung in 30 min"
     await engine.tick()  # still visible until the next check
     assert "unter der Schwelle" in render(db.get_bot(bot_id)["status"], "de")
@@ -206,7 +212,7 @@ async def test_ai_minimum_confidence_holds_back_trades(tmp_path: Path, monkeypat
     ex.now += 31 * 60_000
     confidences.append(80)  # at the threshold: executed
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"]
+    assert pos(db.get_bot(bot_id))
 
 
 async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, monkeypatch):
@@ -233,7 +239,7 @@ async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, mon
 
     answers.append("wait")
     await engine.tick()
-    assert db.get_bot(bot_id)["state"].get("position") is None
+    assert pos(db.get_bot(bot_id)) is None
     assert briefs[-1].position is None and "24h" in briefs[-1].changes
     assert models == ["claude-haiku-4-5"]  # the bot's model reaches the API call
     assert "Only buy on strong dips." in briefs[-1].to_text() and "bot owner" in briefs[-1].to_text()
@@ -244,20 +250,20 @@ async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, mon
     ex.now += 31 * 60_000
     answers.append("buy")
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"], db.get_bot(bot_id)["status"]
+    assert pos(db.get_bot(bot_id)), db.get_bot(bot_id)["status"]
     assert briefs[-1].position is None
 
     ex.now += 31 * 60_000
     ex.price = Decimal("2030")
     answers.append("hold")
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"] and briefs[-1].position["profit_pct"] > 0
+    assert pos(db.get_bot(bot_id)) and briefs[-1].position["profit_pct"] > 0
     assert "Claude: hold" in render(db.get_bot(bot_id)["status"], "en")
 
     ex.now += 31 * 60_000
     answers.append("sell")
     await engine.tick()
-    assert db.get_bot(bot_id)["state"].get("position") is None
+    assert pos(db.get_bot(bot_id)) is None
     trades = db.list_trades(bot_id)
     assert [t["side"] for t in trades] == ["sell", "buy"] and "Claude (80 %" in render(trades[0]["reason"], "en")
     journal = db.list_ai_decisions(bot_id)
@@ -273,7 +279,7 @@ async def test_ai_strategy_without_key_does_nothing(tmp_path: Path, monkeypatch)
     bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50}, True, True)
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert bot["state"].get("position") is None and "ANTHROPIC_API_KEY" in render(bot["status"], "en")
+    assert pos(bot) is None and "ANTHROPIC_API_KEY" in render(bot["status"], "en")
 
 
 @pytest.mark.asyncio
@@ -291,12 +297,12 @@ async def test_ai_sell_at_a_loss_is_held_back(tmp_path: Path, monkeypatch):
     db, engine = make_engine(tmp_path, ex)
     bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 5}, True, True)
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"]
+    assert pos(db.get_bot(bot_id))
     ex.now += 6 * 60_000
     ex.price = Decimal("1950")  # under water: Claude's "sell" must not go through
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"] and "never sells at a loss" in render(bot["status"], "en")
+    assert pos(bot) and "never sells at a loss" in render(bot["status"], "en")
 
 
 class LateFillExchange(FakeExchange):
@@ -320,11 +326,11 @@ async def test_short_reported_fill_keeps_polling(tmp_path: Path, monkeypatch):
     db, engine = make_engine(tmp_path, ex, live=True)
     bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50}, True, False)
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"]
+    assert pos(db.get_bot(bot_id))
     ex.short_reads = 2  # the sell is reported short twice, then complete
     await engine.close_position(bot_id)
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"] is None, bot["status"]
+    assert pos(bot) is None, bot["status"]
     assert len(db.list_trades(bot_id)) == 2
 
 
@@ -338,12 +344,12 @@ async def test_short_fill_is_completed_on_a_later_tick(tmp_path: Path, monkeypat
     ex.short_reads = 5  # short for the whole polling window – a third gets booked, the rest stays open
     await engine.close_position(bot_id)
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"] and bot["state"]["fill_check"]
+    assert pos(bot) and bot["state"]["fill_check"]
     assert len(db.list_trades(bot_id)) == 2
     ex.short_reads = 0  # the exchange now reports the complete fill
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"] is None, bot["status"]
+    assert pos(bot) is None, bot["status"]
     trades = db.list_trades(bot_id)
     assert [t["side"] for t in trades] == ["sell", "sell", "buy"] and trades[0]["order_id"].endswith("#2")
     sold = sum(Decimal(t["base_qty"]) for t in trades if t["side"] == "sell")
@@ -366,7 +372,7 @@ async def test_position_left_after_a_sell_is_reconciled(tmp_path: Path, monkeypa
     db.update_bot(bot_id, state=state)
     ex.short_reads = 0
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"] is None
+    assert pos(db.get_bot(bot_id)) is None
 
 
 class HoldingsExchange(FakeExchange):
@@ -386,7 +392,7 @@ async def test_holdings_mismatch_pauses_trading_and_clears(tmp_path: Path, monke
     db, engine = make_engine(tmp_path, ex, live=True)
     bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50, "stop_loss": 1}, True, False)
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"]
+    assert pos(db.get_bot(bot_id))
 
     ex.held = {"ETH": Decimal(0)}  # the coins vanished from the exchange
     ex.price = Decimal("1900")  # stop-loss would fire – but the books are wrong, so nothing is traded
@@ -400,7 +406,7 @@ async def test_holdings_mismatch_pauses_trading_and_clears(tmp_path: Path, monke
     engine._holdings_checked_at = 0
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert not bot["state"].get("holdings_mismatch") and bot["state"]["position"] is None  # stop-loss sold
+    assert not bot["state"].get("holdings_mismatch") and pos(bot) is None  # stop-loss sold
 
 
 @pytest.mark.asyncio
@@ -413,7 +419,7 @@ async def test_manual_close_writes_off_coins_missing_on_exchange(tmp_path: Path,
     ex.held = {"ETH": Decimal(0)}
     await engine.close_position(bot_id)
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"] is None and not bot["state"].get("holdings_mismatch")
+    assert pos(bot) is None and not bot["state"].get("holdings_mismatch")
     assert len(db.list_trades(bot_id)) == 1  # nothing was sold
     assert any("Written off" in render(e["message"], "en") for e in db.list_events(bot_id, 10))
 
@@ -427,7 +433,7 @@ async def test_fill_is_booked_only_after_two_matching_reads(tmp_path: Path, monk
     ex.short_reads = 1  # first read of the buy is short, all later reads complete
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"] and not bot["state"].get("fill_check"), bot["status"]
+    assert pos(bot) and not bot["state"].get("fill_check"), bot["status"]
     assert Decimal(db.list_trades(bot_id)[0]["base_qty"]) > Decimal("0.02")  # the full 50 € buy, not a third
 
 
@@ -505,10 +511,10 @@ async def test_discard_position_forgets_it_without_a_trade(tmp_path: Path, monke
     db, engine = make_engine(tmp_path, ex, live=True)
     bot_id = db.create_bot("Live", "dip", "ETH-EUR", {"amount": 50}, True, False)
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"]
+    assert pos(db.get_bot(bot_id))
     await engine.discard_position(bot_id)
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"] is None and "discarded" in render(bot["status"], "en")
+    assert pos(bot) is None and "discarded" in render(bot["status"], "en")
     assert [t["side"] for t in db.list_trades(bot_id)] == ["buy"]  # nothing sold
     with pytest.raises(Exception):
         await engine.discard_position(bot_id)  # no position any more
@@ -549,11 +555,11 @@ async def test_engine_paper_roundtrip(tmp_path: Path):
 
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"], bot["status"]
+    assert pos(bot), bot["status"]
     ex.price = Decimal("2030")
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"] is None, bot["status"]
+    assert pos(bot) is None, bot["status"]
     trades = db.list_trades(bot_id)
     assert [t["side"] for t in trades] == ["sell", "buy"]
     assert Decimal(trades[0]["pnl"]) > 0
@@ -569,9 +575,9 @@ async def test_mock_exchange_live_order_flow(tmp_path: Path):
     engine = Engine(db, ex, settings)
     bot_id = db.create_bot("DCA", "dca", "BTC-EUR", {"amount": 25}, True, False)
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"]
+    assert pos(db.get_bot(bot_id))
     await engine.close_position(bot_id)
-    assert db.get_bot(bot_id)["state"]["position"] is None
+    assert pos(db.get_bot(bot_id)) is None
     assert len(db.list_trades(bot_id)) == 2
 
 
@@ -583,7 +589,7 @@ def make_engine(tmp_path, ex, live=False):
 
 
 def open_positions(db):
-    return sum(1 for b in db.list_bots() if b["state"].get("position"))
+    return sum(1 for b in db.list_bots() if pos(b))
 
 
 async def test_max_open_positions_limit(tmp_path: Path):
@@ -595,7 +601,7 @@ async def test_max_open_positions_limit(tmp_path: Path):
     await engine.tick()
     await engine.tick()
     assert open_positions(db) == 2
-    blocked = [b for b in db.list_bots() if not b["state"].get("position")][0]
+    blocked = [b for b in db.list_bots() if not pos(b)][0]
     assert "Limit erreicht: 2/2" in render(blocked["status"], "de")
     assert "Limit reached: 2/2" in render(blocked["status"], "en")
 
@@ -642,7 +648,7 @@ async def test_blocked_buy_stays_visible_as_hint(tmp_path: Path):
     assert engine.describe_bot(db.get_bot(b), db.trade_stats(), "de")["hint"] is None
     await engine.tick()
     bot = db.get_bot(b)
-    assert bot["state"].get("position") and "blocked_buy" not in bot["state"]
+    assert pos(bot) and "blocked_buy" not in bot["state"]
     assert engine.describe_bot(bot, db.trade_stats(), "de")["hint"] is None
 
 
@@ -668,14 +674,14 @@ async def test_lost_order_response_is_not_resent(tmp_path: Path):
 
     await engine.tick()  # order placed, response lost
     bot = db.get_bot(bot_id)
-    assert bot["state"]["pending_order"] and not bot["state"].get("position")
+    assert bot["state"]["pending_order"] and not pos(bot)
     assert "unklar" in render(bot["status"], "de")
 
     await engine.tick()  # reconciled via client_order_id instead of sending a new order
     await engine.tick()
     bot = db.get_bot(bot_id)
     assert len(ex.placed) == 1
-    assert bot["state"].get("position") and not bot["state"].get("pending_order")
+    assert pos(bot) and not bot["state"].get("pending_order")
     assert len(db.list_trades(bot_id)) == 1
 
 
@@ -694,7 +700,7 @@ async def test_live_position_is_sold_live_after_switching_live_off(tmp_path: Pat
     db, engine = make_engine(tmp_path, ex, live=True)
     bot_id = db.create_bot("A", "dip", "ETH-EUR", {}, True, False)
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"]["paper"] is False
+    assert pos(db.get_bot(bot_id))["paper"] is False
     assert len(ex.placed) == 1
 
     db.set_setting("live_trading", False)  # user switches live trading off
@@ -734,7 +740,7 @@ async def test_targets_show_what_the_bot_waits_for(tmp_path: Path):
     assert engine.describe_bot(db.get_bot(dip), db.trade_stats(), "de")["targets"] is None
     await engine.tick()
     bot = db.get_bot(dip)
-    entry = float(bot["state"]["position"]["cost"]) / float(bot["state"]["position"]["qty"])
+    entry = float(pos(bot)["cost"]) / float(pos(bot)["qty"])
     t = engine.describe_bot(bot, db.trade_stats(), "de")["targets"]
     assert t["buy_price"] is None
     assert t["sell_price"] == pytest.approx(entry * 1.02) and t["stop_price"] == pytest.approx(entry * 0.95)
@@ -764,14 +770,14 @@ async def test_switching_to_paper_sells_all_live_positions(tmp_path: Path):
     live_b = db.create_bot("B", "dip", "BTC-EUR", {}, True, False)
     paper = db.create_bot("P", "dip", "SOL-EUR", {}, True, True)
     await engine.tick()
-    assert all(db.get_bot(i)["state"].get("position") for i in (live_a, live_b, paper))
+    assert all(pos(db.get_bot(i)) for i in (live_a, live_b, paper))
 
     db.set_setting("live_trading", False)
     results = await engine.close_live_positions("Live-Handel beendet")
     assert sorted(r["bot_name"] for r in results) == ["A", "B"] and all(r["ok"] for r in results)
-    assert db.get_bot(live_a)["state"]["position"] is None
-    assert db.get_bot(live_b)["state"]["position"] is None
-    assert db.get_bot(paper)["state"]["position"]  # simulated positions are not touched
+    assert pos(db.get_bot(live_a)) is None
+    assert pos(db.get_bot(live_b)) is None
+    assert pos(db.get_bot(paper))  # simulated positions are not touched
     assert len(ex.placed) == 4  # 2 live buys + 2 live sells
 
 
@@ -805,3 +811,75 @@ async def test_ai_brief_includes_fear_greed_when_enabled(tmp_path: Path, monkeyp
                                     "last_7_days": [18, 22, 25, 30, 28, 31, 35]}
     assert '"fear_greed_index": 18' in with_index.to_text()
     assert without.sentiment is None and "fear_greed" not in without.to_text()
+
+
+async def test_several_trades_are_spaced_and_sold_one_by_one(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")  # −1.5 % in 24 h: buy signal
+    db, engine = make_engine(tmp_path, ex)
+    params = {"max_trades": 3, "trade_spacing": 2, "sell_mode": "profit", "take_profit": 1}
+    bot_id = db.create_bot("Multi", "dip", "ETH-EUR", params, True, True)
+    await engine.tick()
+    await engine.tick()  # the signal lasts – but the next trade has to be 2 % below the first
+    bot = db.get_bot(bot_id)
+    assert len(trades_of(bot["state"])) == 1
+    assert "next trade only at" in render(bot["status"], "en") and "1/3 trades open" in render(bot["status"], "en")
+    first_entry = trades_of(bot["state"])[0].entry_price
+    assert bot["state"]["targets"]["buy_price"] == pytest.approx(float(first_entry * Decimal("0.98")))
+
+    ex.price = Decimal("1930")  # 2 % below the first entry: second trade
+    await engine.tick()
+    trades = trades_of(db.get_bot(bot_id)["state"])
+    assert len(trades) == 2 and trades[0].id != trades[1].id
+
+    ex.price = Decimal("1960")  # +1.5 % for the second trade, still −0.6 % for the first
+    await engine.tick()
+    left = trades_of(db.get_bot(bot_id)["state"])
+    assert [t.id for t in left] == [trades[0].id]
+    sells = [t for t in db.list_trades(bot_id) if t["side"] == "sell"]
+    assert len(sells) == 1 and Decimal(sells[0]["pnl"]) > 0
+
+    described = engine.describe_bot(db.get_bot(bot_id), db.trade_stats())
+    assert described["max_trades"] == 3 and [p["id"] for p in described["positions"]] == [trades[0].id]
+    assert described["position"]["qty"] == pytest.approx(float(trades[0].qty))
+
+
+async def test_each_trade_counts_towards_the_position_limit(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    db.set_limits({"max_open_positions": 2})
+    bot_id = db.create_bot("Multi", "dip", "ETH-EUR", {"max_trades": 5, "trade_spacing": 0}, True, True)
+    for _ in range(4):
+        await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert len(trades_of(bot["state"])) == 2
+    assert "Limit reached: 2/2" in render(bot["status"], "en")
+    assert engine.summary()["open_positions"] == 2
+
+
+async def test_selling_one_live_trade_keeps_the_others(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Multi", "dip", "ETH-EUR", {"max_trades": 2, "trade_spacing": 0}, True, False)
+    await engine.tick()
+    await engine.tick()
+    trades = trades_of(db.get_bot(bot_id)["state"])
+    assert len(trades) == 2 and all(not t.paper for t in trades)
+    assert trades[0].order_id and trades[0].order_id != trades[1].order_id
+
+    await engine.close_position(bot_id, position_id=trades[1].id)
+    left = trades_of(db.get_bot(bot_id)["state"])
+    assert [t.id for t in left] == [trades[0].id]
+    await engine.discard_position(bot_id, position_id=trades[0].id)
+    assert trades_of(db.get_bot(bot_id)["state"]) == []
+
+
+async def test_a_position_stored_before_multiple_trades_is_still_managed(tmp_path: Path):
+    ex = FakeExchange("2000", "2100")  # +5 %: the profit target is reached
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Old", "dip", "ETH-EUR", {"sell_mode": "profit", "take_profit": 2}, True, True)
+    db.update_bot(bot_id, state={"position": {"qty": "0.025", "cost": "50", "opened_at": 0, "peak": "2000", "paper": True}})
+    assert engine.describe_bot(db.get_bot(bot_id), {})["positions"][0]["qty"] == 0.025
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert trades_of(bot["state"]) == [] and "position" not in bot["state"]
+    assert db.list_trades(bot_id)[0]["side"] == "sell"

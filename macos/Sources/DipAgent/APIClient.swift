@@ -51,8 +51,8 @@ struct APIClient {
         try await request("GET", path, query: query, body: Optional<BotInput>.none)
     }
 
-    func post<T: Decodable>(_ path: String) async throws -> T {
-        try await request("POST", path, body: Optional<BotInput>.none)
+    func post<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
+        try await request("POST", path, query: query, body: Optional<BotInput>.none)
     }
 
     func send<T: Decodable, B: Encodable>(_ method: String, _ path: String, body: B) async throws -> T {

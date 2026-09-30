@@ -28,7 +28,7 @@ from .engine import Engine
 from .exchange import Exchange, MockExchange, RevolutXExchange
 from .i18n import Problem, as_message, lang_from_header, m, render, text
 from .revolutx import RevolutXClient, RevolutXError
-from .strategies import STRATEGIES
+from .strategies import STRATEGIES, has_position
 from .strategies.ai import AiStrategy
 
 VERSION = "1.12.0"
@@ -403,7 +403,7 @@ async def update_bot(bot_id: int, body: BotIn, lang: str = Depends(get_lang)) ->
     bot = _bot_or_404(bot_id, lang)
     symbol, params = await _validate(body, lang)
     # an order in flight is reconciled under the bot's pair – it must not change under it either
-    busy = bot["state"].get("position") or bot["state"].get("pending_order")
+    busy = has_position(bot["state"]) or bot["state"].get("pending_order")
     if busy and (symbol != bot["symbol"] or body.strategy != bot["strategy"]):
         raise fail(409, lang, "api.locked_pair_strategy")
     if busy and body.paper != bot["paper"]:
@@ -420,7 +420,7 @@ async def update_bot(bot_id: int, body: BotIn, lang: str = Depends(get_lang)) ->
 @api.delete("/bots/{bot_id}", status_code=204, response_class=Response)
 async def delete_bot(bot_id: int, force: bool = False, lang: str = Depends(get_lang)) -> Response:
     bot = _bot_or_404(bot_id, lang)
-    if (bot["state"].get("position") or bot["state"].get("pending_order")) and not force:
+    if (has_position(bot["state"]) or bot["state"].get("pending_order")) and not force:
         raise fail(409, lang, "api.delete_open_position")
     db.delete_bot(bot_id)
     return Response(status_code=204)
@@ -444,10 +444,11 @@ async def stop_bot(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, Any]
 
 
 @api.post("/bots/{bot_id}/close")
-async def close_position(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, Any]:
+async def close_position(bot_id: int, position_id: str | None = None, lang: str = Depends(get_lang)) -> dict[str, Any]:
+    """Sell one trade (``position_id``) or all of the bot's trades at market."""
     _bot_or_404(bot_id, lang)
     try:
-        await engine.close_position(bot_id)
+        await engine.close_position(bot_id, position_id=position_id)
     except Problem as exc:
         raise fail_with(409, lang, exc) from exc
     except Exception as exc:  # noqa: BLE001
@@ -456,11 +457,11 @@ async def close_position(bot_id: int, lang: str = Depends(get_lang)) -> dict[str
 
 
 @api.post("/bots/{bot_id}/discard")
-async def discard_position(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, Any]:
-    """Remove the position from the books without selling (the coins stay on the exchange, unmanaged)."""
+async def discard_position(bot_id: int, position_id: str | None = None, lang: str = Depends(get_lang)) -> dict[str, Any]:
+    """Remove one trade (or all) from the books without selling (the coins stay on the exchange, unmanaged)."""
     _bot_or_404(bot_id, lang)
     try:
-        await engine.discard_position(bot_id)
+        await engine.discard_position(bot_id, position_id=position_id)
     except Problem as exc:
         raise fail_with(409, lang, exc) from exc
     return _describe(bot_id, lang)

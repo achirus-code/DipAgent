@@ -311,3 +311,13 @@
 "Quit DipAgent? The bots run on the agent and keep trading – you just won't see them or get notifications until you open the app again." = "DipAgent beenden? Die Bots laufen auf dem Agent weiter und handeln weiter – du siehst sie nur nicht und bekommst keine Benachrichtigungen, bis du die App wieder öffnest.";
 "Don't ask again" = "Nicht mehr fragen";
 "Ask before quitting" = "Vor dem Beenden nachfragen";
+
+/* Several trades per bot */
+"%@ to the next trade" = "%@ bis zum nächsten Trade";
+"Open live trades %@/%@" = "Offene Live-Trades %@/%@";
+"Open trades %@/%@" = "Offene Trades %@/%@";
+"Value %@" = "Wert %@";
+"Target %@" = "Ziel %@";
+"Trade %@" = "Trade %@";
+"Sell this trade now" = "Diesen Trade jetzt verkaufen";
+"Up to %@ invested at the same time" = "Bis zu %@ gleichzeitig investiert";

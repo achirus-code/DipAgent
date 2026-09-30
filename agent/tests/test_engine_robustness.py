@@ -13,6 +13,12 @@ from app.i18n import Problem, render
 from app.revolutx import RevolutXClient, RevolutXError
 from app.strategies import STRATEGIES, Param
 from tests.test_core import HOUR, FakeExchange, make_engine
+from app.strategies import open_positions
+
+def pos(bot):
+    """The bot's first open trade (as stored) or None."""
+    positions = open_positions(bot["state"])
+    return positions[0].to_state() if positions else None
 
 
 class CountingExchange(FakeExchange):
@@ -57,7 +63,7 @@ async def test_rejected_manual_close_leaves_no_pending_order(tmp_path: Path):
         await engine.close_position(bot_id)
     bot = db.get_bot(bot_id)
     assert bot["state"].get("pending_order") is None  # a refused order is gone from the DB, not just from memory
-    assert bot["state"]["position"]
+    assert pos(bot)
     assert "insufficient funds" in render(bot["status"], "en")
 
 
@@ -71,13 +77,13 @@ async def test_reconciled_order_clears_backoff_and_error_status(tmp_path: Path):
 
     await engine.tick()  # found via client_order_id and booked
     bot = db.get_bot(bot_id)
-    assert bot["state"]["position"] and not bot["state"].get("pending_order")
+    assert pos(bot) and not bot["state"].get("pending_order")
     assert not bot["state"].get("retry_after"), "the backoff must not outlive the reconciled order"
     assert "Error" not in render(bot["status"], "en")
 
     ex.price = Decimal("1900")  # -3.5 % -> stop-loss must fire right away, not after the old backoff
     await engine.tick()
-    assert db.get_bot(bot_id)["state"]["position"] is None
+    assert pos(db.get_bot(bot_id)) is None
     assert len(ex.placed) == 2
 
 
@@ -97,7 +103,7 @@ async def test_unreadable_response_is_treated_as_unclear_not_as_refused(tmp_path
     assert bot["state"]["pending_order"], "a ValueError must not be taken as 'order was not placed'"
     await engine.tick()  # looked up by client_order_id instead of being resent
     assert len(ex.placed) == 1
-    assert db.get_bot(bot_id)["state"]["position"]
+    assert pos(db.get_bot(bot_id))
 
 
 def test_definitely_not_placed_classification():
@@ -183,7 +189,7 @@ async def test_savings_plan_closes_paper_position_when_going_live(tmp_path: Path
     db, engine = make_engine(tmp_path, ex, live=False)
     bot_id = db.create_bot("DCA", "dca", "ETH-EUR", {"interval_hours": 1, "take_profit": 0}, True, True)
     await engine.tick()  # simulated buy
-    assert db.get_bot(bot_id)["state"]["position"]["paper"] is True
+    assert pos(db.get_bot(bot_id))["paper"] is True
 
     db.set_setting("live_trading", True)
     db.update_bot(bot_id, paper=False)
@@ -192,7 +198,7 @@ async def test_savings_plan_closes_paper_position_when_going_live(tmp_path: Path
     bot = db.get_bot(bot_id)
     trades = db.list_trades(bot_id)
     assert [(t["side"], bool(t["paper"])) for t in trades] == [("buy", False), ("sell", True), ("buy", True)]
-    assert bot["state"]["position"]["paper"] is False
+    assert pos(bot)["paper"] is False
     assert len(ex.placed) == 1  # exactly one real order
 
 
@@ -203,7 +209,7 @@ async def test_stopped_bots_and_the_buy_lock_do_not_block_others(tmp_path: Path)
     a = db.create_bot("A", "dip", "ETH-EUR", {}, True, False)
     b = db.create_bot("B", "dip", "ETH-EUR", {}, True, False)
     await engine.tick()
-    assert all(db.get_bot(i)["state"]["position"] for i in (a, b))
+    assert all(pos(db.get_bot(i)) for i in (a, b))
     assert not engine._buy_lock.locked()
 
 
