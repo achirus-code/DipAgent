@@ -8,6 +8,7 @@ All notable changes to DipAgent are documented here. The format follows [Keep a 
 
 - **App: profits easier to read.** In light mode profits use a darker green (the system green was too light on
   light backgrounds); the statistics card no longer turns green behind green numbers.
+- **App: PAPER and LIVE badges easier to read** – a darker orange and green in light mode.
 
 ## [1.15.0] – 2026-09-30
 

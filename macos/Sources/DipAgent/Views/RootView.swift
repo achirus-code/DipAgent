@@ -279,10 +279,10 @@ struct SummaryCard: View {
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 Spacer()
                 if liveAllowed {
-                    Badge(text: "LIVE", color: .green, icon: "bolt.fill")
+                    Badge(text: "LIVE", color: .profit, icon: "bolt.fill")
                         .help("Live trading is active – bots trade with real money")
                 } else {
-                    Badge(text: "PAPER MODE", color: .orange, icon: "testtube.2")
+                    Badge(text: "PAPER MODE", color: .paper, icon: "testtube.2")
                         .help("All orders are only simulated. Live trading: Settings → Trading mode")
                 }
             }

@@ -165,7 +165,7 @@ struct BotCard: View {
                                 .font(.system(size: bot.enabled ? 13 : 12.5, weight: .semibold))
                                 .foregroundStyle(bot.enabled ? Color.primary : Color.secondary)
                                 .lineLimit(1)
-                            if bot.paper { Badge(text: "PAPER", color: .orange) } else { Badge(text: "LIVE", color: .green, icon: "bolt.fill") }
+                            if bot.paper { Badge(text: "PAPER", color: .paper) } else { Badge(text: "LIVE", color: .profit, icon: "bolt.fill") }
                         }
                         Text(verbatim: "\(bot.symbol) · \(bot.strategyName)")
                             .font(.system(size: 10.5)).foregroundStyle(.secondary)
@@ -621,7 +621,7 @@ struct BotDetailView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 5) {
                             Text(bot.symbol).font(.system(size: 15, weight: .bold, design: .rounded))
-                            if bot.paper { Badge(text: "PAPER", color: .orange) } else { Badge(text: "LIVE", color: .green, icon: "bolt.fill") }
+                            if bot.paper { Badge(text: "PAPER", color: .paper) } else { Badge(text: "LIVE", color: .profit, icon: "bolt.fill") }
                         }
                         Text(bot.strategyName).font(.system(size: 11)).foregroundStyle(.secondary)
                     }

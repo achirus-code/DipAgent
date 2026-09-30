@@ -69,6 +69,13 @@ extension Color {
             ? .systemGreen
             : NSColor(srgbRed: 0.09, green: 0.50, blue: 0.22, alpha: 1)
     })
+
+    /// Orange for paper trading (badges): the system orange is too light on its own tint in light mode.
+    static let paper = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? .systemOrange
+            : NSColor(srgbRed: 0.72, green: 0.36, blue: 0.0, alpha: 1)
+    })
 }
 
 // MARK: - Building blocks

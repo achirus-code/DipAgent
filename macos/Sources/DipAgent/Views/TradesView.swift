@@ -93,7 +93,7 @@ struct TradeRow: View {
                 HStack(spacing: 5) {
                     (trade.isBuy ? Text("Buy \(trade.base)") : Text("Sell \(trade.base)"))
                         .font(.system(size: 12.5, weight: .semibold))
-                    if trade.paper { Badge(text: "PAPER", color: .orange) }
+                    if trade.paper { Badge(text: "PAPER", color: .paper) }
                 }
                 Text(verbatim: "\(trade.botName) · \(Fmt.qty(trade.baseQty)) @ \(Fmt.price(trade.price, trade.quote))")
                     .font(.system(size: 10.5))
