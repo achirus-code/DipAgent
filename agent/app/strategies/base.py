@@ -321,6 +321,12 @@ class Strategy:
         }
 
 
+COOLDOWN_LABEL = L("Pause after buy or sale", "Pause nach Kauf oder Verkauf")
+COOLDOWN_HELP = L("Minutes to wait after every buy and every sale before the bot buys again.",
+                  "Minuten Wartezeit nach jedem Kauf und jedem Verkauf, bevor der Bot erneut kauft.")
+
+
 def cooldown_left(ctx: Context, minutes: float) -> int:
-    last_sell = int(ctx.state.get("last_sell_at") or 0)
-    return max(0, last_sell + int(minutes * 60_000) - ctx.now)
+    """The pause counts from the last trade – a sale, or a buy (which matters when several trades may be open)."""
+    last_trade = max(int(ctx.state.get("last_sell_at") or 0), int(ctx.state.get("last_buy_at") or 0))
+    return max(0, last_trade + int(minutes * 60_000) - ctx.now)

@@ -816,7 +816,7 @@ async def test_ai_brief_includes_fear_greed_when_enabled(tmp_path: Path, monkeyp
 async def test_several_trades_are_spaced_and_sold_one_by_one(tmp_path: Path):
     ex = FakeExchange("2000", "1970")  # −1.5 % in 24 h: buy signal
     db, engine = make_engine(tmp_path, ex)
-    params = {"max_trades": 3, "trade_spacing": 2, "sell_mode": "profit", "take_profit": 1}
+    params = {"max_trades": 3, "trade_spacing": 2, "sell_mode": "profit", "take_profit": 1, "cooldown_minutes": 0}
     bot_id = db.create_bot("Multi", "dip", "ETH-EUR", params, True, True)
     await engine.tick()
     await engine.tick()  # the signal lasts – but the next trade has to be 2 % below the first
@@ -850,7 +850,7 @@ async def test_each_trade_counts_towards_the_position_limit(tmp_path: Path):
     ex = FakeExchange("2000", "1970")
     db, engine = make_engine(tmp_path, ex)
     db.set_limits({"max_open_positions": 2})
-    bot_id = db.create_bot("Multi", "dip", "ETH-EUR", {"max_trades": 5, "trade_spacing": 0}, True, True)
+    bot_id = db.create_bot("Multi", "dip", "ETH-EUR", {"max_trades": 5, "trade_spacing": 0, "cooldown_minutes": 0}, True, True)
     for _ in range(4):
         await engine.tick()
     bot = db.get_bot(bot_id)
@@ -862,7 +862,7 @@ async def test_each_trade_counts_towards_the_position_limit(tmp_path: Path):
 async def test_selling_one_live_trade_keeps_the_others(tmp_path: Path):
     ex = FakeExchange("2000", "1970")
     db, engine = make_engine(tmp_path, ex, live=True)
-    bot_id = db.create_bot("Multi", "dip", "ETH-EUR", {"max_trades": 2, "trade_spacing": 0}, True, False)
+    bot_id = db.create_bot("Multi", "dip", "ETH-EUR", {"max_trades": 2, "trade_spacing": 0, "cooldown_minutes": 0}, True, False)
     await engine.tick()
     await engine.tick()
     trades = trades_of(db.get_bot(bot_id)["state"])
@@ -896,7 +896,7 @@ async def test_reset_paper_deletes_simulated_trades_only(tmp_path: Path):
     ex.price = Decimal("2000")
     await engine.tick()  # sold with profit
     ex.price = Decimal("1970")
-    db.update_bot(bot_id, state={**db.get_bot(bot_id)["state"], "last_sell_at": 0})
+    db.update_bot(bot_id, state={**db.get_bot(bot_id)["state"], "last_sell_at": 0, "last_buy_at": 0})
     await engine.tick()  # open again
     db.add_trade(bot_id=bot_id, bot_name="Paper", symbol="ETH-EUR", side="buy", price="1", base_qty="1",
                  quote_amount="1", fee="0", pnl=None, order_id="live-1", paper=0, reason="")
@@ -935,3 +935,17 @@ async def test_min_time_between_trades_counts_from_the_last_buy(tmp_path: Path):
     await engine.tick()
     assert len(trades_of(db.get_bot(bot_id)["state"])) == 2
     assert STRATEGIES["dip"].to_json("de")["params"][-1]["unit"] == "Tage"
+
+
+async def test_the_pause_also_follows_a_buy(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")  # a lasting buy signal
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Paused", "dip", "ETH-EUR", {"max_trades": 2, "trade_spacing": 0, "cooldown_minutes": 60}, True, True)
+    await engine.tick()
+    ex.now += 30 * 60_000
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert len(trades_of(bot["state"])) == 1 and "Cooling down for 30 min" in render(bot["status"], "en")
+    ex.now += 30 * 60_000
+    await engine.tick()
+    assert len(trades_of(db.get_bot(bot_id)["state"])) == 2

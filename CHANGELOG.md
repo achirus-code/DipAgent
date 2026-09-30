@@ -6,6 +6,10 @@ All notable changes to DipAgent are documented here. The format follows [Keep a 
 
 ### Changed
 
+- **The pause also follows a buy.** *Pause after selling* is now *Pause after buy or sale*: the bot waits that long
+  after every buy and every sale before it buys again – so with several trades the next one doesn't open right
+  after the last. With one trade at a time nothing changes (it can't buy while its trade is open).
+
 - **App: profits easier to read.** In light mode profits use a darker green (the system green was too light on
   light backgrounds); the statistics card no longer turns green behind green numbers.
 - **App: PAPER and LIVE badges easier to read** – a darker orange and green in light mode.

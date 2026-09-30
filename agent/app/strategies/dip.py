@@ -5,7 +5,10 @@ from __future__ import annotations
 from decimal import Decimal
 
 from ..i18n import L, dur, m, pct
-from .base import Buy, Context, Decision, Option, Param, Sell, Strategy, cooldown_left, multi_trade_params
+from .base import (
+    COOLDOWN_HELP, COOLDOWN_LABEL, Buy, Context, Decision, Option, Param, Sell, Strategy, cooldown_left,
+    multi_trade_params,
+)
 
 
 class DipStrategy(Strategy):
@@ -45,9 +48,7 @@ class DipStrategy(Strategy):
               min=0, max=100, step=0.05),
         Param("stop_loss", L("Stop-loss", "Stop-Loss"), "percent", 0.0,
               L("Sell at this loss. 0 = off.", "Verkauf bei so viel Verlust. 0 = aus."), min=0, max=90, step=0.5),
-        Param("cooldown_minutes", L("Pause after selling", "Pause nach Verkauf"), "int", 60,
-              L("Minutes to wait after a sale before buying again.", "Minuten Wartezeit nach einem Verkauf, bevor erneut gekauft wird."),
-              min=0, max=10080, unit="min"),
+        Param("cooldown_minutes", COOLDOWN_LABEL, "int", 60, COOLDOWN_HELP, min=0, max=10080, unit="min"),
         *multi_trade_params(),
     ]
 
