@@ -22,7 +22,7 @@ import httpx
 from .config import Settings
 from .db import Database, now_ms
 from .exchange import Candle, Exchange, OrderResult, PairInfo, Ticker
-from .i18n import Problem, as_message, dump, m, message_key, money, qty, render
+from .i18n import Problem, as_message, dump, dur, m, message_key, money, qty, render
 from .revolutx import RevolutXError
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell, has_position, open_positions, store_positions
 
@@ -390,11 +390,22 @@ class Engine:
                 spacing = Decimal(str(params.get("trade_spacing", 0))) / 100
                 next_price = min(p.entry_price for p in positions) * (1 - spacing)
                 if buy_targets and buy_targets.get("buy_price"):
+                    # both conditions must hold – the app shows each, the headline the stricter one
+                    buy_targets["signal_price"] = buy_targets["buy_price"]
+                    buy_targets["spacing_price"] = float(next_price)
                     buy_targets["buy_price"] = min(buy_targets["buy_price"], float(next_price))
+            # "Min. time between trades": counted from the last buy, whether that trade is still open or not
+            interval_ms = int(float(params.get("trade_interval_days") or 0) * 86_400_000)
+            wait = int(state.get("last_buy_at") or 0) + interval_ms - view.now if interval_ms else 0
             if isinstance(decision.action, Buy):
-                if next_price is None or view.price <= next_price:
+                if wait > 0:
+                    buy_status = m("engine.trade_interval", left=dur(wait))
+                elif next_price is None or view.price <= next_price:
                     return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason)
-                buy_status = m("engine.trade_spacing", price=money(next_price, quote))
+                else:
+                    buy_status = m("engine.trade_spacing", price=money(next_price, quote))
+            elif wait > 0:
+                buy_status = m("engine.trade_interval_waiting", left=dur(wait), status=decision.status)
             else:
                 buy_status = decision.status
 

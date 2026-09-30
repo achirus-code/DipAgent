@@ -159,9 +159,15 @@ struct BotTargets: Codable, Equatable {
     let sellPrice: Double?
     let stopPrice: Double?
     let note: String?
+    // with open trades a further buy needs both: the strategy's own signal and the distance to the open trades
+    // (agent 1.15+); `buyPrice` is the stricter of the two
+    let signalPrice: Double?
+    let spacingPrice: Double?
 
     enum CodingKeys: String, CodingKey {
         case buyPrice = "buy_price"
+        case signalPrice = "signal_price"
+        case spacingPrice = "spacing_price"
         case sellPrice = "sell_price"
         case stopPrice = "stop_price"
         case note

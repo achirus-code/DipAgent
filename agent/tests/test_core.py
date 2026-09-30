@@ -825,6 +825,9 @@ async def test_several_trades_are_spaced_and_sold_one_by_one(tmp_path: Path):
     assert "next trade only at" in render(bot["status"], "en") and "1/3 trades open" in render(bot["status"], "en")
     first_entry = trades_of(bot["state"])[0].entry_price
     assert bot["state"]["targets"]["buy_price"] == pytest.approx(float(first_entry * Decimal("0.98")))
+    # the dip threshold (2000 × 0.99) and the distance to the open trade are reported one by one
+    assert bot["state"]["targets"]["signal_price"] == pytest.approx(1980)
+    assert bot["state"]["targets"]["spacing_price"] == bot["state"]["targets"]["buy_price"]
 
     ex.price = Decimal("1930")  # 2 % below the first entry: second trade
     await engine.tick()
@@ -915,3 +918,20 @@ async def test_reset_paper_refuses_with_an_open_live_trade(tmp_path: Path):
     with pytest.raises(Problem):
         await engine.reset_paper(bot_id)
     assert len(db.list_trades(bot_id)) == 1
+
+
+async def test_min_time_between_trades_counts_from_the_last_buy(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")  # a lasting buy signal
+    db, engine = make_engine(tmp_path, ex)
+    params = {"max_trades": 3, "trade_spacing": 0, "trade_interval_days": 1}
+    bot_id = db.create_bot("Daily", "dip", "ETH-EUR", params, True, True)
+    await engine.tick()
+    ex.now += 23 * HOUR
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert len(trades_of(bot["state"])) == 1
+    assert "next trade at the earliest in 1 h" in render(bot["status"], "en")
+    ex.now += 1 * HOUR
+    await engine.tick()
+    assert len(trades_of(db.get_bot(bot_id)["state"])) == 2
+    assert STRATEGIES["dip"].to_json("de")["params"][-1]["unit"] == "Tage"

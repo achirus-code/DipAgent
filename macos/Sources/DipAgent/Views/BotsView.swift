@@ -356,9 +356,11 @@ struct GoalLines: View {
                 Text(Fmt.price(market.price, bot.quoteCurrency)).font(.system(size: 12, weight: .medium))
             }
             if let details {
+                // up to two lines: with open trades both buy conditions are listed
                 Text(verbatim: details)
                     .font(.system(size: large ? 11 : 10)).foregroundStyle(.secondary)
-                    .minimumScaleFactor(0.85)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .monospacedDigit()
@@ -387,7 +389,17 @@ struct GoalLines: View {
         var parts: [String] = []
         if let goal = bot.goal {
             switch goal.kind {
-            case .buy: parts.append(String(localized: "Buy at ≤ \(Fmt.price(goal.target, q))"))
+            case .buy:
+                if let signal = bot.targets?.signalPrice, let spacing = bot.targets?.spacingPrice {
+                    // both must be reached – show each with its distance, so it is clear which one holds the buy back
+                    func distance(_ price: Double) -> String {
+                        market.price <= price ? String(localized: "already reached") : Fmt.pct((price / market.price - 1) * 100)
+                    }
+                    parts.append(String(localized: "Buy threshold ≤ \(Fmt.price(signal, q)) (\(distance(signal)))"))
+                    parts.append(String(localized: "Distance to open trades ≤ \(Fmt.price(spacing, q)) (\(distance(spacing)))"))
+                } else {
+                    parts.append(String(localized: "Buy at ≤ \(Fmt.price(goal.target, q))"))
+                }
             case .sell: parts.append(String(localized: "Sell at ≥ \(Fmt.price(goal.target, q))"))
             case .trailingStart: parts.append(String(localized: "Trailing from \(Fmt.price(goal.target, q))"))
             case .trailingStop: parts.append(String(localized: "Trailing stop \(Fmt.price(goal.target, q))"))

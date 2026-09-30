@@ -329,3 +329,8 @@
 /* Pair list in the bot editor */
 "Search pair, e.g. BTC" = "Paar suchen, z. B. BTC";
 "No pair found" = "Kein Paar gefunden";
+
+/* Both conditions for a further trade */
+"Buy threshold ≤ %@ (%@)" = "Kaufschwelle ≤ %@ (%@)";
+"Distance to open trades ≤ %@ (%@)" = "Abstand zu offenen Trades ≤ %@ (%@)";
+"already reached" = "bereits erreicht";

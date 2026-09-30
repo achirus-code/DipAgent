@@ -42,7 +42,7 @@ class Param:
     max: float | None = None
     step: float | None = None
     options: list[Option] | None = None
-    unit: str | None = None  # display unit for plain numbers, e.g. "h" or "min"
+    unit: str | L | None = None  # display unit for plain numbers, e.g. "h" or "min" (L when it needs translating)
 
     def coerce(self, value: Any) -> Any:
         try:
@@ -73,8 +73,8 @@ class Param:
         if self.help:
             data["help"] = self.help(lang)
         for name in ("min", "max", "step", "unit"):
-            if getattr(self, name) is not None:
-                data[name] = getattr(self, name)
+            if (value := getattr(self, name)) is not None:
+                data[name] = value(lang) if isinstance(value, L) else value
         if self.options:
             data["options"] = [{"value": o.value, "label": o.label(lang)} for o in self.options]
         return data
@@ -172,6 +172,12 @@ def multi_trade_params() -> list[Param]:
                 "Bei mehreren Trades: ein weiterer erst, wenn der Kurs mindestens so weit unter dem niedrigsten "
                 "Einstieg der offenen Trades liegt – damit nicht alle zum gleichen Kurs kaufen."),
               min=0, max=50, step=0.1),
+        Param("trade_interval_days", L("Min. time between trades", "Mindestzeit zwischen Trades"), "number", 0.0,
+              L("A new trade only when at least this many days have passed since the last buy – e.g. 1 or 2. "
+                "0 = off.",
+                "Ein neuer Trade erst, wenn seit dem letzten Kauf mindestens so viele Tage vergangen sind – "
+                "z. B. 1 oder 2. 0 = aus."),
+              min=0, max=60, step=0.5, unit=L("days", "Tage")),
     ]
 
 

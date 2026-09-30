@@ -286,6 +286,14 @@ CATALOG: dict[str, L] = {
         "Paper result reset – {count} simulated trades deleted, starting from scratch",
         "Paper-Ergebnis zurückgesetzt – {count} simulierte Trades gelöscht, Neustart bei null",
     ),
+    "engine.trade_interval": L(
+        "Buy signal – next trade at the earliest in {left} (min. time between trades)",
+        "Kaufsignal – nächster Trade frühestens in {left} (Mindestzeit zwischen Trades)",
+    ),
+    "engine.trade_interval_waiting": L(
+        "Next trade at the earliest in {left} · {status}",
+        "Nächster Trade frühestens in {left} · {status}",
+    ),
     "engine.trades_open": L("{open}/{max} trades open · {status}", "{open}/{max} Trades offen · {status}"),
     "engine.mode_changed_paper": L(
         "Paper position open, mode was changed – selling only",
