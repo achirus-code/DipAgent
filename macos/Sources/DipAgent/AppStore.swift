@@ -192,6 +192,10 @@ final class AppStore {
             async let b: [Bot] = client.get("/bots")
             async let t: [Trade] = client.get("/trades", query: ["limit": "300"])
             let (newStatus, newSummary, newBots, newTrades) = try await (s, sum, b, t)
+            // the agent was updated while the app kept running – its strategies may have new settings
+            if let old = status?.version, old != newStatus.version {
+                strategies = (try? await client.get("/strategies")) ?? strategies
+            }
             status = newStatus
             summary = newSummary
             notifyAboutBlockedBuys(newBots)

@@ -2,6 +2,13 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **App: new bot settings after an agent update.** The app reloads the strategies when the agent's version
+  changes – before, new settings (e.g. *Max. open trades*) only appeared after restarting the app.
+
 ## [1.13.0] – 2026-09-30
 
 ### Added
