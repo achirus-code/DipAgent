@@ -883,3 +883,35 @@ async def test_a_position_stored_before_multiple_trades_is_still_managed(tmp_pat
     bot = db.get_bot(bot_id)
     assert trades_of(bot["state"]) == [] and "position" not in bot["state"]
     assert db.list_trades(bot_id)[0]["side"] == "sell"
+
+
+async def test_reset_paper_deletes_simulated_trades_only(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Paper", "dip", "ETH-EUR", {"sell_mode": "profit", "take_profit": 1}, True, True)
+    await engine.tick()
+    ex.price = Decimal("2000")
+    await engine.tick()  # sold with profit
+    ex.price = Decimal("1970")
+    db.update_bot(bot_id, state={**db.get_bot(bot_id)["state"], "last_sell_at": 0})
+    await engine.tick()  # open again
+    db.add_trade(bot_id=bot_id, bot_name="Paper", symbol="ETH-EUR", side="buy", price="1", base_qty="1",
+                 quote_amount="1", fee="0", pnl=None, order_id="live-1", paper=0, reason="")
+    assert len(db.list_trades(bot_id)) == 4 and pos(db.get_bot(bot_id))
+
+    await engine.reset_paper(bot_id)
+    bot = db.get_bot(bot_id)
+    assert pos(bot) is None and [t["order_id"] for t in db.list_trades(bot_id)] == ["live-1"]
+    assert "3 simulated trades deleted" in render(bot["status"], "en")
+    assert engine.describe_bot(bot, db.trade_stats())["realized_pnl"] == 0
+
+
+async def test_reset_paper_refuses_with_an_open_live_trade(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Live", "dip", "ETH-EUR", {}, True, False)
+    await engine.tick()
+    assert pos(db.get_bot(bot_id))
+    with pytest.raises(Problem):
+        await engine.reset_paper(bot_id)
+    assert len(db.list_trades(bot_id)) == 1

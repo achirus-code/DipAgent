@@ -579,6 +579,9 @@ struct BotDetailView: View {
                         parameters(bot)
                         recentTrades(bot)
                         activity
+                        if bot.paper, bot.tradesCount > 0 || !bot.openTrades.isEmpty {
+                            resetPaperSection(bot)
+                        }
                         deleteSection(bot)
                     }
                     .padding(14)
@@ -812,6 +815,19 @@ struct BotDetailView: View {
                 }
             }
         }
+    }
+
+    /// Paper bots: start the result from scratch – simulated trades are deleted, live trades never.
+    private func resetPaperSection(_ bot: Bot) -> some View {
+        ConfirmButton(
+            title: "Reset paper result",
+            confirmTitle: "Delete all paper trades of this bot and reset its result to zero? Open paper trades are discarded. This cannot be undone.",
+            icon: "arrow.counterclockwise",
+            tint: .orange
+        ) {
+            do { try await store.resetPaper(bot); error = nil } catch { self.error = error.localizedDescription }
+        }
+        .padding(.top, 4)
     }
 
     private func deleteSection(_ bot: Bot) -> some View {

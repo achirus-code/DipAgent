@@ -321,3 +321,7 @@
 "Trade %@" = "Trade %@";
 "Sell this trade now" = "Diesen Trade jetzt verkaufen";
 "Up to %@ invested at the same time" = "Bis zu %@ gleichzeitig investiert";
+
+/* Reset the paper result of a bot */
+"Reset paper result" = "Paper-Ergebnis zurücksetzen";
+"Delete all paper trades of this bot and reset its result to zero? Open paper trades are discarded. This cannot be undone." = "Alle Paper-Trades dieses Bots löschen und das Ergebnis auf null setzen? Offene Paper-Trades werden verworfen. Das lässt sich nicht rückgängig machen.";

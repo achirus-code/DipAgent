@@ -307,6 +307,13 @@ final class AppStore {
         await refresh()
     }
 
+    /// Paper only: deletes the bot's simulated trades and open paper trades – its result starts at zero.
+    func resetPaper(_ bot: Bot) async throws {
+        guard let client else { return }
+        let _: Bot = try await client.post("/bots/\(bot.id)/reset-paper")
+        await refresh()
+    }
+
     /// "AI decides" only: a fresh decision from Claude right now (one extra check).
     func askClaude(_ bot: Bot) async throws {
         guard let client else { return }

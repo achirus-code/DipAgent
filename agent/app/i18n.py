@@ -282,6 +282,10 @@ CATALOG: dict[str, L] = {
         "Buy signal – next trade only at ≤ {price} (distance to the open trades)",
         "Kaufsignal – nächster Trade erst bei ≤ {price} (Abstand zu den offenen Trades)",
     ),
+    "engine.paper_reset": L(
+        "Paper result reset – {count} simulated trades deleted, starting from scratch",
+        "Paper-Ergebnis zurückgesetzt – {count} simulierte Trades gelöscht, Neustart bei null",
+    ),
     "engine.trades_open": L("{open}/{max} trades open · {status}", "{open}/{max} Trades offen · {status}"),
     "engine.mode_changed_paper": L(
         "Paper position open, mode was changed – selling only",
@@ -345,6 +349,10 @@ CATALOG: dict[str, L] = {
     "err.not_ai": L("Only an “AI decides” bot can ask Claude", "Nur ein „KI entscheidet“-Bot kann Claude fragen"),
     "err.bot_stopped": L("The bot is stopped – start it first", "Der Bot ist gestoppt – zuerst starten"),
     "err.no_market_data": L("No market data ({error})", "Keine Marktdaten ({error})"),
+    "err.reset_live_open": L(
+        "The bot holds a live trade – sell it first, only the paper result can be reset",
+        "Der Bot hält einen Live-Trade – erst verkaufen, zurücksetzen lässt sich nur das Paper-Ergebnis",
+    ),
     "err.order_running": L("An order is already in progress", "Es läuft bereits eine Order"),
     "err.amount_below_min": L("Amount {amount} is below the minimum of {min}", "Betrag {amount} unter Mindestgröße {min}"),
     "err.insufficient": L(

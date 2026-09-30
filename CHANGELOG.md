@@ -4,6 +4,12 @@ All notable changes to DipAgent are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- **Reset a bot's paper result.** In the bot view of a paper bot, *Reset paper result* deletes the bot's simulated
+  trades and discards its open paper trades – the result starts at zero. Live trades are never deleted; a bot with
+  an open live trade or an order in flight refuses.
+
 ### Fixed
 
 - **App: new bot settings after an agent update.** The app reloads the strategies when the agent's version

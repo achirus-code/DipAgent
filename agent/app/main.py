@@ -467,6 +467,17 @@ async def discard_position(bot_id: int, position_id: str | None = None, lang: st
     return _describe(bot_id, lang)
 
 
+@api.post("/bots/{bot_id}/reset-paper")
+async def reset_paper(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, Any]:
+    """Delete the bot's paper trades and discard its open paper trades – its paper result starts at zero."""
+    _bot_or_404(bot_id, lang)
+    try:
+        await engine.reset_paper(bot_id)
+    except Problem as exc:
+        raise fail_with(409, lang, exc) from exc
+    return _describe(bot_id, lang)
+
+
 @api.post("/bots/{bot_id}/ask")
 async def ask_claude_now(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, Any]:
     """"AI decides" only: get a fresh decision from Claude right now instead of waiting for the next check."""

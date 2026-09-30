@@ -237,6 +237,12 @@ class Database:
         marks = ", ".join("?" for _ in t)
         return self._exec(f"INSERT INTO trades ({cols}) VALUES ({marks})", tuple(t.values()))
 
+    def delete_paper_trades(self, bot_id: int) -> int:
+        """Removes a bot's simulated trades (live trades stay). Returns how many were deleted."""
+        count = self._one("SELECT COUNT(*) AS n FROM trades WHERE bot_id = ? AND paper = 1", (bot_id,))["n"]
+        self._exec("DELETE FROM trades WHERE bot_id = ? AND paper = 1", (bot_id,))
+        return int(count)
+
     def list_trades(self, bot_id: int | None = None, limit: int = 200) -> list[dict[str, Any]]:
         if bot_id is None:
             return self._all("SELECT * FROM trades ORDER BY created_at DESC, id DESC LIMIT ?", (limit,))

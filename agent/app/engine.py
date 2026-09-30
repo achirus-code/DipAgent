@@ -532,6 +532,28 @@ class Engine:
             self._persist(bot, state, status, before)
             return status
 
+    async def reset_paper(self, bot_id: int) -> Message:
+        """Start the bot's paper result from scratch: its simulated trades are deleted and open paper trades
+        discarded. Live trades are never touched – a bot with an open live trade or an order in flight refuses."""
+        async with self._locks[bot_id]:
+            bot = self.db.get_bot(bot_id)
+            if not bot:
+                raise KeyError(bot_id)
+            state = bot["state"]
+            if state.get("pending_order"):
+                raise Problem("err.order_running")
+            if bot_has_live_position(bot):
+                raise Problem("err.reset_live_open")
+            before = self._snapshot(bot)
+            deleted = self.db.delete_paper_trades(bot_id)
+            store_positions(state, [])  # only paper trades are open (checked above)
+            for key in ("targets", "position_targets", "blocked_buy", "last_sell_at", "last_buy_at"):
+                state.pop(key, None)
+            status = m("engine.paper_reset", count=deleted)
+            self.db.add_event(bot_id, "info", status)
+            self._persist(bot, state, status, before)
+            return status
+
     async def close_live_positions(self, reason: Message) -> list[dict[str, Any]]:
         """Market-sell every open live position (used when switching back to paper mode)."""
         results = []
