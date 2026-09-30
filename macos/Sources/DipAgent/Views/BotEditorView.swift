@@ -340,7 +340,7 @@ struct BotEditorView: View {
             base * pct / 100 - TradeCostCheck.roundTripFee(amount: base, quote: quote, feeRate: feeRate)
         }
         func profit(_ value: Double, _ template: (String) -> String) -> (String, Color) {
-            (template(Fmt.money(value, quote, signed: true)), value > 0 ? .green : .orange)
+            (template(Fmt.money(value, quote, signed: true)), value > 0 ? .profit : .orange)
         }
         switch (strategyKey, key) {
         case ("ai", "model"):

@@ -371,8 +371,8 @@ struct SummaryCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
                     LinearGradient(
-                        // green tint when in profit, otherwise the neutral accent – never red
-                        colors: [((result?.total ?? 0) >= 0.005 ? Color.green : Color.accentColor).opacity(0.16), Color.accentColor.opacity(0.06)],
+                        // always the neutral accent: a green tint behind green profit numbers made them hard to read
+                        colors: [Color.accentColor.opacity(0.14), Color.accentColor.opacity(0.06)],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                 )

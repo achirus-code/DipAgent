@@ -2,6 +2,13 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **App: profits easier to read.** In light mode profits use a darker green (the system green was too light on
+  light backgrounds); the statistics card no longer turns green behind green numbers.
+
 ## [1.15.0] – 2026-09-30
 
 ### Added

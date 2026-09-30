@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Formatting
@@ -54,10 +55,20 @@ extension Double {
     }
 
     var pnlColor: Color {
-        if self >= 0.005 { return .green }
+        if self >= 0.005 { return .profit }
         if self <= -0.005 { return .red }
         return .secondary
     }
+}
+
+extension Color {
+    /// Green for profits in text: the system green is too light to read on light backgrounds, so light mode uses a
+    /// darker shade; dark mode keeps the system green.
+    static let profit = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? .systemGreen
+            : NSColor(srgbRed: 0.09, green: 0.50, blue: 0.22, alpha: 1)
+    })
 }
 
 // MARK: - Building blocks
