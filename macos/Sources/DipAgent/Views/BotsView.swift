@@ -777,19 +777,20 @@ struct BotDetailView: View {
                 if decisions.isEmpty {
                     Text("No answers yet – Claude is asked at the next check.")
                         .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                } else if decisions.count <= 4 {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(decisions) { DecisionRow(decision: $0, currency: quoteCurrency) }
+                    }
                 } else {
-                    let rows = VStack(alignment: .leading, spacing: 10) {
-                        ForEach(decisions) { decision in
-                            DecisionRow(decision: decision, currency: quoteCurrency)
+                    // a longer history scrolls inside a fixed height – lazily, so opening the page only builds
+                    // the rows in view instead of all (up to 100) answers
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(decisions) { DecisionRow(decision: $0, currency: quoteCurrency) }
                         }
                     }
-                    // a few answers show as they are; a longer history scrolls inside a fixed height
-                    ViewThatFits(in: .vertical) {
-                        rows
-                        ScrollView { rows }
-                            .scrollIndicators(.visible)
-                    }
-                    .frame(maxHeight: 300)
+                    .scrollIndicators(.visible)
+                    .frame(height: 300)
                 }
             }
         }

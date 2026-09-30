@@ -8,6 +8,9 @@ All notable changes to DipAgent are documented here. The format follows [Keep a 
 
 - **App: Claude's decisions** in the bot view scroll inside a fixed height once there are more than a few – the
   sections below stay in reach. The list now holds all loaded answers instead of the last 30.
+- **App: faster bot view and editor.** Claude's decisions are built lazily (only the rows in view). The trading
+  pair is chosen from a searchable list instead of a menu with several hundred pairs that was rebuilt on every
+  keystroke in the editor.
 
 ## [1.14.0] – 2026-09-30
 

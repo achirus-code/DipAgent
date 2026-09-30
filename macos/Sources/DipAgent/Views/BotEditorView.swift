@@ -53,6 +53,7 @@ struct BotEditorView: View {
     @State private var loaded = false
     /// New bots start with the strategy choice; the settings come after (existing bots open on the settings).
     @State private var choosingStrategy = false
+    @State private var choosingPair = false
     /// A free-text rule ("Additional instructions") is edited on its own page with a large text area.
     @State private var editingText: StrategyParam?
 
@@ -240,14 +241,28 @@ struct BotEditorView: View {
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 120)
                     } else {
-                        Picker("", selection: $symbol) {
-                            ForEach(sortedPairs, id: \.self) { Text($0).tag($0) }
+                        Button {
+                            withAnimation(.snappy(duration: 0.2)) { choosingPair.toggle() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(verbatim: symbol).font(.system(size: 12, weight: .medium))
+                                Spacer(minLength: 0)
+                                Image(systemName: choosingPair ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .frame(width: 140)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.07)))
                         }
-                        .labelsHidden()
-                        .frame(width: 140)
+                        .buttonStyle(.plain)
                     }
                 }
                 .disabled(hasPosition)
+                if choosingPair, !hasPosition {
+                    PairList(pairs: sortedPairs, selection: $symbol) {
+                        withAnimation(.snappy(duration: 0.2)) { choosingPair = false }
+                    }
+                }
             }
         }
     }
@@ -729,5 +744,55 @@ struct TradeCostCheck {
         if fiat.contains(quote) { sellFee = (sellFee * 100).rounded(.up) / 100 }
         let fee = buyFee + sellFee
         return (fee, fee / amount * 100)
+    }
+}
+
+
+/// The pairs to choose from – Revolut X lists several hundred. A menu with all of them is built again with every
+/// change in the editor (each keystroke), which made the editor slow; this list is only built when opened, lazily,
+/// and can be searched.
+struct PairList: View {
+    let pairs: [String]
+    @Binding var selection: String
+    let done: () -> Void
+    @State private var search = ""
+
+    private var matches: [String] {
+        let query = search.trimmingCharacters(in: .whitespaces)
+        return query.isEmpty ? pairs : pairs.filter { $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("Search pair, e.g. BTC", text: $search)
+                .textFieldStyle(.roundedBorder)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(matches, id: \.self) { pair in
+                        Button {
+                            selection = pair
+                            done()
+                        } label: {
+                            HStack {
+                                Text(verbatim: pair).font(.system(size: 12))
+                                Spacer()
+                                if pair == selection {
+                                    Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
+                                }
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(RoundedRectangle(cornerRadius: 5)
+                                .fill(pair == selection ? Color.accentColor.opacity(0.15) : Color.clear))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(height: 180)
+            if matches.isEmpty {
+                Text("No pair found").font(.system(size: 10.5)).foregroundStyle(.secondary)
+            }
+        }
     }
 }

@@ -325,3 +325,7 @@
 /* Reset the paper result of a bot */
 "Reset paper result" = "Paper-Ergebnis zurücksetzen";
 "Delete all paper trades of this bot and reset its result to zero? Open paper trades are discarded. This cannot be undone." = "Alle Paper-Trades dieses Bots löschen und das Ergebnis auf null setzen? Offene Paper-Trades werden verworfen. Das lässt sich nicht rückgängig machen.";
+
+/* Pair list in the bot editor */
+"Search pair, e.g. BTC" = "Paar suchen, z. B. BTC";
+"No pair found" = "Kein Paar gefunden";
