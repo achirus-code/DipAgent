@@ -2,6 +2,13 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **App: Claude's decisions** in the bot view scroll inside a fixed height once there are more than a few – the
+  sections below stay in reach. The list now holds all loaded answers instead of the last 30.
+
 ## [1.14.0] – 2026-09-30
 
 ### Added

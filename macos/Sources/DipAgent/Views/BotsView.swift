@@ -778,11 +778,18 @@ struct BotDetailView: View {
                     Text("No answers yet – Claude is asked at the next check.")
                         .font(.system(size: 10.5)).foregroundStyle(.secondary)
                 } else {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(decisions.prefix(30)) { decision in
+                    let rows = VStack(alignment: .leading, spacing: 10) {
+                        ForEach(decisions) { decision in
                             DecisionRow(decision: decision, currency: quoteCurrency)
                         }
                     }
+                    // a few answers show as they are; a longer history scrolls inside a fixed height
+                    ViewThatFits(in: .vertical) {
+                        rows
+                        ScrollView { rows }
+                            .scrollIndicators(.visible)
+                    }
+                    .frame(maxHeight: 300)
                 }
             }
         }
