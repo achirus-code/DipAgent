@@ -20,10 +20,10 @@
 "Trailing stop %@" = "Trailing-Stop %@";
 "Price %@" = "Kurs %@";
 "%@ 24h" = "%@ 24h";
-"%@ · %@ to buy" = "%@ · %@ bis zum Kauf";
-"%@ · %@ to sell" = "%@ · %@ bis zum Verkauf";
-"%@ · %@ until trailing starts" = "%@ · %@ bis Trailing-Start";
-"%@ · %@ to the trailing stop" = "%@ · %@ bis zum Trailing-Stop";
+"%@ to buy" = "%@ bis zum Kauf";
+"%@ to sell" = "%@ bis zum Verkauf";
+"%@ until trailing starts" = "%@ bis Trailing-Start";
+"%@ to the trailing stop" = "%@ bis zum Trailing-Stop";
 "Buy price reached" = "Kaufkurs erreicht";
 "Sell price reached" = "Verkaufskurs erreicht";
 "Trailing starts" = "Trailing startet";
@@ -79,6 +79,7 @@
 "Open live position" = "Offene Live-Position";
 "Open position" = "Offene Position";
 "%@ %@ · entry %@" = "%@ %@ · Einstieg %@";
+"Value %@ · invested %@" = "Wert %@ · investiert %@";
 "Edit" = "Bearbeiten";
 "Bot" = "Bot";
 "Bot not found" = "Bot nicht gefunden";
@@ -304,3 +305,9 @@
 "Change" = "Ändern";
 "≈ %@ ct per check · ≈ %@ per month at every %@ min" = "≈ %@ ct je Prüfung · ≈ %@ im Monat bei alle %@ min";
 "No Anthropic API key on the agent – set ANTHROPIC_API_KEY in agent/.env or the add-on option “Anthropic API key”." = "Kein Anthropic-API-Key im Agenten – ANTHROPIC_API_KEY in agent/.env oder die Add-on-Option „Anthropic-API-Key“ setzen.";
+
+/* Quit button in the header */
+"Quit DipAgent" = "DipAgent beenden";
+"Quit DipAgent? The bots run on the agent and keep trading – you just won't see them or get notifications until you open the app again." = "DipAgent beenden? Die Bots laufen auf dem Agent weiter und handeln weiter – du siehst sie nur nicht und bekommst keine Benachrichtigungen, bis du die App wieder öffnest.";
+"Don't ask again" = "Nicht mehr fragen";
+"Ask before quitting" = "Vor dem Beenden nachfragen";

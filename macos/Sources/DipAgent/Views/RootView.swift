@@ -144,6 +144,9 @@ struct RootView: View {
 struct HeaderView: View {
     @Environment(AppStore.self) private var store
     var showSummary = true
+    @AppStorage("confirmQuit") private var confirmQuit = true
+    @State private var confirmingQuit = false
+    @State private var dontAskAgain = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -169,6 +172,23 @@ struct HeaderView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Refresh")
+                Button {
+                    if confirmQuit {
+                        withAnimation(.snappy(duration: 0.2)) { confirmingQuit.toggle() }
+                    } else {
+                        NSApp.terminate(nil)
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(width: 26, height: 26)
+                        .background(Circle().fill(Color.primary.opacity(0.06)))
+                }
+                .buttonStyle(.plain)
+                .help("Quit DipAgent")
+            }
+            if confirmingQuit {
+                quitConfirmation
             }
             if showSummary, store.isConnected, let summary = store.summary {
                 SummaryCard(
@@ -182,6 +202,34 @@ struct HeaderView: View {
                 )
             }
         }
+    }
+
+    /// Inline confirmation (alerts are unreliable inside menu bar panels). Quitting only closes the app –
+    /// the bots run on the agent and keep trading.
+    private var quitConfirmation: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Quit DipAgent? The bots run on the agent and keep trading – you just won't see them or get notifications until you open the app again.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Toggle("Don't ask again", isOn: $dontAskAgain)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 11))
+            HStack {
+                Spacer()
+                Button("Cancel") { withAnimation(.snappy(duration: 0.2)) { confirmingQuit = false; dontAskAgain = false } }
+                    .buttonStyle(.bordered)
+                Button("Quit") {
+                    if dontAskAgain { confirmQuit = false }
+                    NSApp.terminate(nil)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            }
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(0.05)))
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     private var statusColor: Color {

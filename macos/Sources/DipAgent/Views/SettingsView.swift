@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var showToken = false
     @State private var launchAtLogin = false
     @State private var language = AppLanguage.override ?? ""
+    @AppStorage("confirmQuit") private var confirmQuit = true
 
     var body: some View {
         @Bindable var store = store
@@ -53,6 +54,9 @@ struct SettingsView: View {
                         ))
                         .toggleStyle(.switch).controlSize(.small)
                         .font(.system(size: 12))
+                        Toggle("Ask before quitting", isOn: $confirmQuit)
+                            .toggleStyle(.switch).controlSize(.small)
+                            .font(.system(size: 12))
                         labeled("Language") {
                             Picker("", selection: $language) {
                                 Text("System").tag("")

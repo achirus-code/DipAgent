@@ -336,7 +336,7 @@ struct RunToggle: View {
     }
 }
 
-/// "−1.80% · −42.00 $ to buy" first, then the trigger price, the stop and the current price in small print.
+/// "−1.80% to buy" first, then the trigger price, the stop and the current price in small print.
 /// Strategies without a fixed trigger show their note (or the price) instead.
 struct GoalLines: View {
     let bot: Bot
@@ -364,16 +364,15 @@ struct GoalLines: View {
     }
 
     private func headline(_ goal: BotGoal) -> String {
-        let q = bot.quoteCurrency
-        let pct = Fmt.pct(goal.percent), amount = Fmt.price(goal.change, q, signed: true)
+        let pct = Fmt.pct(goal.percent)
         switch (goal.kind, goal.reached) {
-        case (.buy, false): return String(localized: "\(pct) · \(amount) to buy")
+        case (.buy, false): return String(localized: "\(pct) to buy")
         case (.buy, true): return String(localized: "Buy price reached")
-        case (.sell, false): return String(localized: "\(pct) · \(amount) to sell")
+        case (.sell, false): return String(localized: "\(pct) to sell")
         case (.sell, true): return String(localized: "Sell price reached")
-        case (.trailingStart, false): return String(localized: "\(pct) · \(amount) until trailing starts")
+        case (.trailingStart, false): return String(localized: "\(pct) until trailing starts")
         case (.trailingStart, true): return String(localized: "Trailing starts")
-        case (.trailingStop, false): return String(localized: "\(pct) · \(amount) to the trailing stop")
+        case (.trailingStop, false): return String(localized: "\(pct) to the trailing stop")
         case (.trailingStop, true): return String(localized: "Trailing stop reached")
         }
     }
@@ -456,8 +455,11 @@ struct PositionStrip: View {
                 (position.paper == false ? Text("Open live position") : Text("Open position"))
                     .font(.system(size: 9.5, weight: .semibold))
                     .foregroundStyle(position.paper == false ? Color.red : .secondary)
+                // how big the position is: its current value and what went in
+                Text("Value \(Fmt.money(position.value, bot.quoteCurrency)) · invested \(Fmt.money(position.cost, bot.quoteCurrency))")
+                    .font(.system(size: 10.5, weight: .medium)).monospacedDigit()
                 Text("\(Fmt.qty(position.qty)) \(bot.baseCurrency) · entry \(Fmt.price(position.entryPrice, bot.quoteCurrency))")
-                    .font(.system(size: 10.5)).monospacedDigit()
+                    .font(.system(size: 9.5)).foregroundStyle(.secondary).monospacedDigit()
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 1) {

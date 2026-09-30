@@ -166,8 +166,7 @@ struct BotGoal {
 
     let kind: Kind
     let target: Double
-    let change: Double // target minus current price, in the quote currency
-    let percent: Double // the same relative to the current price
+    let percent: Double // target relative to the current price
     let reached: Bool
 }
 
@@ -236,7 +235,7 @@ struct Bot: Codable, Identifiable, Equatable {
         case .buy, .trailingStop: reached = price <= target
         case .sell, .trailingStart: reached = price >= target
         }
-        return BotGoal(kind: kind, target: target, change: target - price, percent: (target / price - 1) * 100, reached: reached)
+        return BotGoal(kind: kind, target: target, percent: (target / price - 1) * 100, reached: reached)
     }
 }
 

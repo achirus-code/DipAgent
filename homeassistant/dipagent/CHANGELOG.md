@@ -2,6 +2,20 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **App: quit button** at the top right of the panel. It asks first – the bots keep trading on the agent – with a
+  "Don't ask again" checkbox; *Settings → Ask before quitting* turns the question back on.
+
+### Changed
+
+- **App: bot cards** show only the percentage to the next trade (e.g. *−1.80 % to buy*); the amount in the quote
+  currency had too many decimals for cheap coins.
+- **App: open position on the bot card** shows its size – current value and invested amount – above amount and
+  entry price.
+
 ## [1.12.0] – 2026-09-29
 
 ### Added
