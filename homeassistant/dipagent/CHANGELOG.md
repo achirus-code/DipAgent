@@ -6,6 +6,9 @@ All notable changes to DipAgent are documented here. The format follows [Keep a 
 
 ### Changed
 
+- **App: trades show their result in percent** next to the amount (e.g. *+1.03 € +2.06 %*) – in the trade list and
+  under the bot's recent trades. Relative to what the sold coins cost, fees included.
+
 - **App: Claude's decisions** in the bot view scroll inside a fixed height once there are more than a few – the
   sections below stay in reach. The list now holds all loaded answers instead of the last 30.
 - **App: faster bot view and editor.** Claude's decisions are built lazily (only the rows in view). The trading

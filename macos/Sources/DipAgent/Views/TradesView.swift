@@ -106,7 +106,14 @@ struct TradeRow: View {
                     .font(.system(size: 12, weight: .medium))
                     .monospacedDigit()
                 if let pnl = trade.pnl {
-                    PnLText(value: pnl, currency: trade.quote, font: .system(size: 10.5, weight: .semibold))
+                    HStack(spacing: 4) {
+                        PnLText(value: pnl, currency: trade.quote, font: .system(size: 10.5, weight: .semibold))
+                        if let pct = trade.pnlPct {
+                            Text(Fmt.pct(pct))
+                                .font(.system(size: 10, weight: .medium)).monospacedDigit()
+                                .foregroundStyle(pct.pnlColor)
+                        }
+                    }
                 } else {
                     Text(trade.date.formatted(date: .omitted, time: .shortened))
                         .font(.system(size: 10.5))

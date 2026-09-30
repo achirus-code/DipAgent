@@ -258,6 +258,12 @@ struct Bot: Codable, Identifiable, Equatable {
 }
 
 struct Trade: Codable, Identifiable, Equatable {
+    /// A sale's result relative to what the sold coins cost (proceeds after fees minus the result = their cost).
+    var pnlPct: Double? {
+        guard let pnl, quoteAmount - pnl > 0 else { return nil }
+        return pnl / (quoteAmount - pnl) * 100
+    }
+
     let id: Int
     let botId: Int
     let botName: String
