@@ -25,6 +25,7 @@ enum Route: Equatable {
     case bot(Int)
     case editor(Int?) // nil = new bot
     case exchangeSetup
+    case trade(Int, from: Int?) // from: the bot whose view it was opened in – "Back" returns there
 }
 
 struct RootView: View {
@@ -79,7 +80,7 @@ struct RootView: View {
             ScrollView {
                 Group {
                     switch tab {
-                    case .trades: TradesView()
+                    case .trades: TradesView(open: navigate)
                     case .bots: BotsView(open: navigate)
                     case .settings: SettingsView(open: navigate)
                     }
@@ -97,6 +98,8 @@ struct RootView: View {
             BotDetailView(botId: id, open: navigate)
         case .exchangeSetup:
             ExchangeSetupView(close: { navigate(nil) })
+        case .trade(let id, let from):
+            TradeDetailPage(tradeId: id, back: { navigate(from.map { .bot($0) }) }, open: { navigate(.trade($0, from: from)) })
         case .editor(let id):
             BotEditorView(bot: id.flatMap { id in store.bots.first { $0.id == id } }, close: { savedId in
                 if let savedId, id == nil { navigate(.bot(savedId)) } else { navigate(id.map { .bot($0) }) }
@@ -198,7 +201,8 @@ struct HeaderView: View {
                     bots: store.bots,
                     trades: store.trades,
                     limits: store.limits,
-                    isDemo: store.status?.exchange == "mock"
+                    isDemo: store.status?.exchange == "mock",
+                    showHistory: { ProfitWindow.show(store: store) }
                 )
             }
         }
@@ -269,6 +273,8 @@ struct SummaryCard: View {
     var trades: [Trade] = []
     var limits: Limits?
     var isDemo = false
+    /// Opens the profit chart window; nil hides the button.
+    var showHistory: (() -> Void)?
 
     var body: some View {
         let result = summary.currencies.first
@@ -294,6 +300,7 @@ struct SummaryCard: View {
                 metric("Open", result?.unrealized ?? 0, currency)
                 metric("Today", result?.today ?? 0, currency)
             }
+            ProfitSparkline(points: profitPoints(currency, realized: result?.realized), open: showHistory)
 
             // How much the bots may still invest under "Risk & limits" – so a new bot is not sized into the limit.
             if let limits {
@@ -398,6 +405,14 @@ struct SummaryCard: View {
     private func fees(_ currency: String) -> Double {
         if let fees = summary.currencies.first(where: { $0.currency == currency })?.fees { return fees }
         return trades.filter { $0.quote == currency }.reduce(0) { $0 + $1.fee }
+    }
+
+    /// The realized result over time for the small curve. The panel only loads the latest trades, so the curve is
+    /// lifted by the result of the older ones – it then ends at the realized total above.
+    private func profitPoints(_ currency: String, realized: Double?) -> [ProfitPoint] {
+        let relevant = trades.filter { $0.quote == currency && (summary.mode == nil || $0.paper == (summary.mode == "paper")) }
+        let loaded = relevant.reduce(0) { $0 + ($1.pnl ?? 0) }
+        return ProfitCurve.points(relevant, offset: (realized ?? loaded) - loaded)
     }
 
     /// Current market value of the positions that really sit on the exchange (paper positions are only simulated).

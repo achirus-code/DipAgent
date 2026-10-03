@@ -284,9 +284,12 @@ struct Trade: Codable, Identifiable, Equatable {
     let paper: Bool
     let reason: String
     let createdAt: Int64
+    /// The trade (position) a buy opened or added to and a sale closed – agent 1.17+; nil for older trades.
+    let positionId: String?
 
     enum CodingKeys: String, CodingKey {
         case id, symbol, side, price, fee, pnl, paper, reason
+        case positionId = "position_id"
         case botId = "bot_id"
         case botName = "bot_name"
         case baseQty = "base_qty"

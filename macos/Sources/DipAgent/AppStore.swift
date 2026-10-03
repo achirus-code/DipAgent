@@ -228,6 +228,12 @@ final class AppStore {
         return (try? await client.get("/bots/\(botId)/decisions", query: ["limit": "100"])) ?? []
     }
 
+    /// The trade history for the profit chart – more than the latest trades the panel keeps (agent maximum: 1000).
+    func allTrades(limit: Int) async -> [Trade]? {
+        guard let client else { return nil }
+        return try? await client.get("/trades", query: ["limit": String(limit)])
+    }
+
     func strategy(_ key: String) -> Strategy? { strategies.first { $0.key == key } }
 
     // MARK: - Bot actions

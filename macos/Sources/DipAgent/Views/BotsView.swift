@@ -771,7 +771,9 @@ struct BotDetailView: View {
                 SectionLabel("Recent trades")
                 Card(padding: 4) {
                     VStack(spacing: 0) {
-                        ForEach(Array(trades)) { TradeRow(trade: $0) }
+                        ForEach(Array(trades)) { trade in
+                            TradeRow(trade: trade, open: { open(.trade(trade.id, from: bot.id)) })
+                        }
                     }
                 }
             }

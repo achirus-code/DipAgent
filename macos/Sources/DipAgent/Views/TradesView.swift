@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TradesView: View {
     @Environment(AppStore.self) private var store
+    var open: (Route?) -> Void = { _ in }
     @State private var botFilter: Int?
 
     private var filtered: [Trade] {
@@ -29,7 +30,7 @@ struct TradesView: View {
                             Card(padding: 4) {
                                 VStack(spacing: 0) {
                                     ForEach(Array(group.trades.enumerated()), id: \.element.id) { index, trade in
-                                        TradeRow(trade: trade)
+                                        TradeRow(trade: trade, open: { open(.trade(trade.id, from: nil)) })
                                         if index < group.trades.count - 1 {
                                             Divider().opacity(0.4).padding(.leading, 44)
                                         }
@@ -79,6 +80,8 @@ struct TradesView: View {
 
 struct TradeRow: View {
     let trade: Trade
+    /// Shows the trade's details; nil = not clickable.
+    var open: (() -> Void)?
     @State private var hovering = false
 
     var body: some View {
@@ -120,11 +123,18 @@ struct TradeRow: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            if open != nil {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
         .background(RoundedRectangle(cornerRadius: 10).fill(hovering ? Color.primary.opacity(0.05) : .clear))
         .onHover { hovering = $0 }
+        .contentShape(Rectangle())
+        .onTapGesture { open?() }
         .help("\(trade.reason)\n\(trade.date.formatted(date: .abbreviated, time: .standard)) · Fee \(Fmt.money(trade.fee, trade.quote))")
     }
 
