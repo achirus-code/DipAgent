@@ -215,7 +215,7 @@
 /* SettingsView.swift */
 "Balance (demo)" = "Guthaben (Demo)";
 "Balance on Revolut X" = "Guthaben auf Revolut X";
-"Notify about new trades" = "Mitteilung bei neuen Trades";
+"Notifications" = "Mitteilungen";
 "Launch at login" = "Bei der Anmeldung starten";
 "Language" = "Sprache";
 "Restart DipAgent to apply the language." = "DipAgent neu starten, um die Sprache zu übernehmen.";

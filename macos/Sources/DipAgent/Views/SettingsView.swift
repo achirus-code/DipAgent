@@ -45,7 +45,7 @@ struct SettingsView: View {
                             .pickerStyle(.segmented)
                             .labelsHidden()
                         }
-                        Toggle("Notify about new trades", isOn: $store.notificationsEnabled)
+                        Toggle("Notifications", isOn: $store.notificationsEnabled)
                             .toggleStyle(.switch).controlSize(.small)
                             .font(.system(size: 12))
                         Toggle("Launch at login", isOn: Binding(
