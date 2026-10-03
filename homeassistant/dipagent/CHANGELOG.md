@@ -2,6 +2,19 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.17.0] – 2026-10-03
+
+### Added
+
+- **App: profit history.** The statistics card shows the realized result as a small curve. *Chart* opens a window
+  with one line per bot (or all together), every buy (▲) and sale (●) as a point, 7 days to all time, paper and live
+  apart. Bots can be switched on and off; a table shows each bot's trades, volume, result and fees in the period.
+- **App: trade details.** A click on a trade – in the chart, in the trade list or under a bot's recent trades – shows
+  when and at what price it was bought and sold, how long it was held, the price change, the fees and the result.
+  The buy and the sale that belong together link to each other.
+- **Sales are linked to their buys.** Every trade now stores which of the bot's trades it opened, added to or
+  closed – so the app shows the exact buy of a sale. Trades from before this version are matched by quantity and order.
+
 ## [1.16.0] – 2026-09-30
 
 ### Changed
