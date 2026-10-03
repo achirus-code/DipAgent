@@ -965,13 +965,14 @@ class Engine:
             position.buys += 1
             position.peak = max(position.peak, price)
         else:
-            positions.append(Position(bought, spent, now_ms(), price, paper=paper, order_id=order_id))
+            position = Position(bought, spent, now_ms(), price, paper=paper, order_id=order_id)
+            positions.append(position)
         store_positions(state, positions)
         state["last_buy_at"] = self.exchange.now_ms()
         self.db.add_trade(
             bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="buy",
             price=str(price), base_qty=str(bought), quote_amount=str(spent), fee=str(fee), pnl=None,
-            order_id=order_id, paper=int(paper), reason=reason,
+            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id,
         )
         status = m("engine.bought", qty=qty(bought), base=pair.base, amount=money(spent, pair.quote))
         self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))
@@ -1000,7 +1001,7 @@ class Engine:
         self.db.add_trade(
             bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="sell",
             price=str(price), base_qty=str(sold), quote_amount=str(proceeds), fee=str(fee), pnl=str(pnl),
-            order_id=order_id, paper=int(paper), reason=reason,
+            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id,
         )
         status = m("engine.sold", qty=qty(sold), base=pair.base, amount=money(proceeds, pair.quote), pnl=money(pnl, pair.quote))
         self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))

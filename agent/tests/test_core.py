@@ -840,6 +840,9 @@ async def test_several_trades_are_spaced_and_sold_one_by_one(tmp_path: Path):
     assert [t.id for t in left] == [trades[0].id]
     sells = [t for t in db.list_trades(bot_id) if t["side"] == "sell"]
     assert len(sells) == 1 and Decimal(sells[0]["pnl"]) > 0
+    # the sale names the trade it closed – the same id as the buy that opened it
+    buys = {t["position_id"]: t for t in db.list_trades(bot_id) if t["side"] == "buy"}
+    assert set(buys) == {trades[0].id, trades[1].id} and sells[0]["position_id"] == trades[1].id
 
     described = engine.describe_bot(db.get_bot(bot_id), db.trade_stats())
     assert described["max_trades"] == 3 and [p["id"] for p in described["positions"]] == [trades[0].id]

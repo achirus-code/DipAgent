@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS settings (
 MIGRATIONS: list[str] = [
     # 1: the P&L summary filters trades by time – give it an index
     "CREATE INDEX IF NOT EXISTS trades_created ON trades(created_at);",
+    # 2: the trade (position) a buy opened or added to and a sale closed – links each sale to its buys
+    "ALTER TABLE trades ADD COLUMN position_id TEXT;",
 ]
 
 DEFAULT_LIMITS: dict[str, Any] = {
