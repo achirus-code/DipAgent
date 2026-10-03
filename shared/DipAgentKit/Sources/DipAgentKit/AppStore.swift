@@ -83,7 +83,8 @@ public final class AppStore {
         }
     }
 
-    private var isConfigured: Bool {
+    /// Address and token are known and the user has not disconnected.
+    public var isConfigured: Bool {
         !serverURL.isEmpty && !token.isEmpty && !UserDefaults.standard.bool(forKey: "userDisconnected")
     }
 

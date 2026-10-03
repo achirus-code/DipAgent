@@ -1,0 +1,3 @@
+// Signing for running the app on your own iPhone: copy Local.xcconfig.example to Local.xcconfig (not checked in)
+// and enter your team ID – or pick the team in Xcode under Signing & Capabilities.
+#include? "Local.xcconfig"

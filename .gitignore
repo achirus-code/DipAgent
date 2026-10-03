@@ -14,3 +14,9 @@ macos/.build/
 macos/build/
 *.xcodeproj/xcuserdata/
 .swiftpm/
+
+# iPhone app
+ios/Local.xcconfig
+ios/build/
+xcuserdata/
+shared/DipAgentKit/.build/

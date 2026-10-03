@@ -1,0 +1,409 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		6A9065744485A50CDBC4F13C /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = C23BAB7A265EEE41FB4E15D9 /* Localizable.strings */; };
+		83BEC46409411FE568D9C504 /* DipAgentKit in Frameworks */ = {isa = PBXBuildFile; productRef = 971FE429B27E17F155B472A9 /* DipAgentKit */; };
+		DE44A4E74C7053D385053312 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = BC25F7902C050F9C9C427751 /* InfoPlist.strings */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0793F462CEFAE2DFDD31836E /* DipAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DipAgent.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		48FE0AD3707E02D89E872673 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		603D72A6313954D49A81E8F5 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		62E1F7F6AC3BF888655E8C61 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		C4783FEA3619F93254A8E7CA /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		D6854A97FC0AAA37BFDEE83A /* DipAgentKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DipAgentKit; path = ../shared/DipAgentKit; sourceTree = SOURCE_ROOT; };
+		FD8E4D8CF6871509CACA07D9 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/Localizable.strings; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		F604394FD4364853AF71A63E /* DipAgent */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DipAgent;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		03A77F6B64FE3C71049AC044 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				83BEC46409411FE568D9C504 /* DipAgentKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		6133C26F616073EEB0A2A682 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0793F462CEFAE2DFDD31836E /* DipAgent.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6775CB1631460265035CBFC8 = {
+			isa = PBXGroup;
+			children = (
+				F604394FD4364853AF71A63E /* DipAgent */,
+				75E713C122A03676A542A78A /* ios */,
+				8F336E30400DC4207A80BD8B /* Localization */,
+				A7A1D42EF427BD8DBB7E7B7B /* Packages */,
+				8C62345F84C7043A3A5996A7 /* Resources */,
+				6133C26F616073EEB0A2A682 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		75E713C122A03676A542A78A /* ios */ = {
+			isa = PBXGroup;
+			children = (
+				603D72A6313954D49A81E8F5 /* Signing.xcconfig */,
+			);
+			name = ios;
+			path = .;
+			sourceTree = "<group>";
+		};
+		8C62345F84C7043A3A5996A7 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				BC25F7902C050F9C9C427751 /* InfoPlist.strings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		8F336E30400DC4207A80BD8B /* Localization */ = {
+			isa = PBXGroup;
+			children = (
+				C23BAB7A265EEE41FB4E15D9 /* Localizable.strings */,
+			);
+			name = Localization;
+			path = ../shared/Localization;
+			sourceTree = "<group>";
+		};
+		A7A1D42EF427BD8DBB7E7B7B /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				D6854A97FC0AAA37BFDEE83A /* DipAgentKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		84E2678309A3AE6677444761 /* DipAgent */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2D6B2F444BCB141164305231 /* Build configuration list for PBXNativeTarget "DipAgent" */;
+			buildPhases = (
+				C5255F3229A49A5E9D40773F /* Sources */,
+				4EF5FEE534F551A13A23AD6B /* Resources */,
+				03A77F6B64FE3C71049AC044 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F604394FD4364853AF71A63E /* DipAgent */,
+			);
+			name = DipAgent;
+			packageProductDependencies = (
+				971FE429B27E17F155B472A9 /* DipAgentKit */,
+			);
+			productName = DipAgent;
+			productReference = 0793F462CEFAE2DFDD31836E /* DipAgent.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4EF55683692BDC44A428AE77 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					84E2678309A3AE6677444761 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = B69BDA9CAD68BBF928EB1E35 /* Build configuration list for PBXProject "DipAgent" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				de,
+				en,
+			);
+			mainGroup = 6775CB1631460265035CBFC8;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				581EE95DFB57890DE8EDFCC7 /* XCLocalSwiftPackageReference "../shared/DipAgentKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 6133C26F616073EEB0A2A682 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				84E2678309A3AE6677444761 /* DipAgent */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4EF5FEE534F551A13A23AD6B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DE44A4E74C7053D385053312 /* InfoPlist.strings in Resources */,
+				6A9065744485A50CDBC4F13C /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C5255F3229A49A5E9D40773F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		BC25F7902C050F9C9C427751 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C4783FEA3619F93254A8E7CA /* de */,
+				48FE0AD3707E02D89E872673 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		C23BAB7A265EEE41FB4E15D9 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				FD8E4D8CF6871509CACA07D9 /* de */,
+				62E1F7F6AC3BF888655E8C61 /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		166A7014D8EFDD2EDE8E6F31 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 603D72A6313954D49A81E8F5 /* Signing.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 6MW9B3DH8C;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3532DA2133D3F69CA4C41184 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = de.achirus.DipAgent.ios;
+				PRODUCT_NAME = DipAgent;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		A1D4D41CCA2A32A67D6FE2A4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = de.achirus.DipAgent.ios;
+				PRODUCT_NAME = DipAgent;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		E1CF3DDB6CF0BDDAA2CBABD8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 603D72A6313954D49A81E8F5 /* Signing.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 6MW9B3DH8C;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2D6B2F444BCB141164305231 /* Build configuration list for PBXNativeTarget "DipAgent" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1D4D41CCA2A32A67D6FE2A4 /* Debug */,
+				3532DA2133D3F69CA4C41184 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B69BDA9CAD68BBF928EB1E35 /* Build configuration list for PBXProject "DipAgent" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				166A7014D8EFDD2EDE8E6F31 /* Debug */,
+				E1CF3DDB6CF0BDDAA2CBABD8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		581EE95DFB57890DE8EDFCC7 /* XCLocalSwiftPackageReference "../shared/DipAgentKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../shared/DipAgentKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		971FE429B27E17F155B472A9 /* DipAgentKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DipAgentKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 4EF55683692BDC44A428AE77 /* Project object */;
+}

@@ -96,6 +96,8 @@ def is_ui_text(literal: str) -> bool:
         return False
     if re.fullmatch(r"[a-z0-9_.\-/]+", text):  # identifiers, symbol names, paths
         return False
+    if re.fullmatch(r"[a-z]+(\.[A-Za-z0-9]+)+", text):  # reverse-DNS identifiers (background task ids …)
+        return False
     return " " in text or bool(re.search(r"[A-Z]", text))
 
 
