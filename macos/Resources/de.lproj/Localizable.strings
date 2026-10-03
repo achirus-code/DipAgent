@@ -400,7 +400,8 @@
 "Since the buy" = "Seit dem Kauf";
 "Result so far" = "Ergebnis bisher";
 "Held until the last sale" = "Gehalten bis zum letzten Verkauf";
-"Show this trade" = "Diesen Trade anzeigen";
 "Trade" = "Trade";
 "Trade not found" = "Trade nicht gefunden";
 "It is no longer among the loaded trades." = "Er ist nicht mehr unter den geladenen Trades.";
+"Of it sold here" = "Davon hier verkauft";
+"Of it from this buy" = "Davon aus diesem Kauf";

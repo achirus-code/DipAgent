@@ -99,7 +99,7 @@ struct RootView: View {
         case .exchangeSetup:
             ExchangeSetupView(close: { navigate(nil) })
         case .trade(let id, let from):
-            TradeDetailPage(tradeId: id, back: { navigate(from.map { .bot($0) }) }, open: { navigate(.trade($0, from: from)) })
+            TradeDetailPage(tradeId: id, back: { navigate(from.map { .bot($0) }) })
         case .editor(let id):
             BotEditorView(bot: id.flatMap { id in store.bots.first { $0.id == id } }, close: { savedId in
                 if let savedId, id == nil { navigate(.bot(savedId)) } else { navigate(id.map { .bot($0) }) }

@@ -283,7 +283,7 @@ struct ProfitHistoryView: View {
                         TradeDetailPanel(
                             trade: detail, links: links, botName: name(detail.botId), botColor: color(detail.botId),
                             market: store.bots.first { $0.id == detail.botId && $0.symbol == detail.symbol }?.market?.price,
-                            select: { self.detail = $0 }, close: { self.detail = nil }
+                            close: { self.detail = nil }
                         )
                         .frame(width: 320)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -479,7 +479,7 @@ struct ProfitHistoryView: View {
             ForEach(markers, id: \.point.id) { marker in
                 let emphasized = marker.point.trade.map { related.contains($0.id) } ?? false
                 PointMark(x: .value("Date", marker.point.date), y: .value("Result", marker.point.value * reveal))
-                    .symbol(marker.point.trade?.isBuy == true ? BasicChartSymbolShape.triangle : .circle)
+                    .symbol(TradeSymbol(isBuy: marker.point.trade?.isBuy == true))
                     .symbolSize(emphasized ? 120 : perBot ? 36 : 44)
                     .foregroundStyle(markerColor(marker))
                     .opacity((related.isEmpty || emphasized ? 1 : 0.3) * reveal)
@@ -488,7 +488,7 @@ struct ProfitHistoryView: View {
                 RuleMark(x: .value("Date", selected.point.date))
                     .foregroundStyle(Color.secondary.opacity(0.35))
                 PointMark(x: .value("Date", selected.point.date), y: .value("Result", selected.point.value * reveal))
-                    .symbol(trade.isBuy ? BasicChartSymbolShape.triangle : .circle)
+                    .symbol(TradeSymbol(isBuy: trade.isBuy))
                     .symbolSize(140)
                     .foregroundStyle(markerColor(selected))
                     .annotation(position: .top, spacing: 8, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
@@ -530,10 +530,9 @@ struct ProfitHistoryView: View {
         }
     }
 
-    /// Total view: buys blue, sales orange (as in the trade list). Per bot: the bot's color, the shape tells buy from sale.
+    /// Buys green, sales red.
     private func markerColor(_ marker: (curve: Curve, point: ProfitPoint)) -> Color {
-        if perBot { return marker.curve.color }
-        return marker.point.trade?.isBuy == true ? .blue : .orange
+        marker.point.trade?.isBuy == false ? .red : .profit // the same in every view – they stand out on every line
     }
 
     private func tooltip(_ trade: Trade, total: Double) -> some View {
@@ -573,11 +572,11 @@ struct ProfitHistoryView: View {
     private var legend: some View {
         HStack(spacing: 14) {
             HStack(spacing: 4) {
-                Image(systemName: "triangle.fill").font(.system(size: 8)).foregroundStyle(perBot ? Color.secondary : .blue)
+                Image(systemName: "triangle.fill").font(.system(size: 8)).foregroundStyle(Color.profit)
                 Text("Buy")
             }
             HStack(spacing: 4) {
-                Image(systemName: "circle.fill").font(.system(size: 8)).foregroundStyle(perBot ? Color.secondary : .orange)
+                Image(systemName: "triangle.fill").rotationEffect(.degrees(180)).font(.system(size: 8)).foregroundStyle(.red)
                 Text("Sale")
             }
             Text("The line shows the realized result, fees deducted – it moves with every sale.")
@@ -720,7 +719,6 @@ struct TradeDetailPanel: View {
     let botColor: Color
     /// Current price of the bot's pair – for coins that are not sold yet.
     let market: Double?
-    let select: (Trade) -> Void
     /// nil: no close button (the panel's trade page has "Back" instead).
     let close: (() -> Void)?
     /// In a card with its own scrolling (next to the chart) – or plain, inside a page that scrolls.
@@ -901,34 +899,33 @@ struct TradeDetailPanel: View {
         Text(text).font(.system(size: 11)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
     }
 
-    /// A linked buy or sale – a click shows its details.
+    /// A linked buy or sale, shown in full – no need to open it.
     private func linked(_ part: TradeLinks.Part, share: Double?) -> some View {
         let other = part.trade
-        return Button { select(other) } label: {
-            HStack(spacing: 8) {
+        let partial = abs(part.qty - other.baseQty) > other.baseQty * 0.005
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
                 Image(systemName: other.isBuy ? "arrow.down.left" : "arrow.up.right")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(other.isBuy ? Color.blue : .orange)
-                    .frame(width: 22, height: 22)
-                    .background(Circle().fill((other.isBuy ? Color.blue : .orange).opacity(0.15)))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: other.date.formatted(date: .abbreviated, time: .shortened))
-                        .font(.system(size: 11.5, weight: .semibold))
-                    Text(verbatim: "\(Fmt.qty(part.qty)) @ \(Fmt.price(other.price, other.quote))")
-                        .font(.system(size: 10.5)).monospacedDigit().foregroundStyle(.secondary)
-                }
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(other.isBuy ? Color.profit : .red)
+                Text(verbatim: other.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 11.5, weight: .semibold))
                 Spacer(minLength: 4)
                 if let share {
-                    PnLText(value: share, currency: other.quote, font: .system(size: 11, weight: .semibold))
+                    PnLText(value: share, currency: other.quote, font: .system(size: 11.5, weight: .semibold))
                 }
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
             }
-            .padding(7)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.05)))
-            .contentShape(Rectangle())
+            row("Price", Fmt.price(other.price, other.quote))
+            row("Quantity", "\(Fmt.qty(other.baseQty)) \(other.base)")
+            if partial {
+                row(other.isBuy ? "Of it sold here" : "Of it from this buy", "\(Fmt.qty(part.qty)) \(other.base)")
+            }
+            row(other.isBuy ? "Amount" : "Proceeds", Fmt.money(other.quoteAmount, other.quote))
+            row("Fee", Fmt.money(other.fee, other.quote))
+            reason(other)
         }
-        .buttonStyle(.plain)
-        .help("Show this trade")
+        .padding(9)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.05)))
     }
 
     private static func duration(_ seconds: TimeInterval) -> String {
@@ -945,7 +942,6 @@ struct TradeDetailPage: View {
     @Environment(AppStore.self) private var store
     let tradeId: Int
     let back: () -> Void
-    let open: (Int) -> Void
     /// The longer history, so the buy that belongs to an older sale is found too.
     @State private var history: [Trade]?
 
@@ -962,7 +958,7 @@ struct TradeDetailPage: View {
                         trade: trade, links: TradeLinks(trades), botName: bot?.name ?? trade.botName,
                         botColor: bot.map { strategyColors($0.strategy)[0] } ?? .secondary,
                         market: bot?.symbol == trade.symbol ? bot?.market?.price : nil,
-                        select: { open($0.id) }, close: nil, framed: false
+                        close: nil, framed: false
                     )
                     .padding(14)
                 }
@@ -975,5 +971,27 @@ struct TradeDetailPage: View {
             }
         }
         .task { history = await store.allTrades(limit: 1000) ?? store.trades }
+    }
+}
+
+/// Chart symbol for a trade: a buy points up, a sale points down.
+struct TradeSymbol: ChartSymbolShape {
+    let isBuy: Bool
+
+    var perceptualUnitRect: CGRect { CGRect(x: 0, y: 0, width: 1, height: 1) }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        if isBuy {
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        } else {
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        }
+        path.closeSubpath()
+        return path
     }
 }
