@@ -1,13 +1,13 @@
 import Foundation
 
 /// Loosely typed JSON value for strategy parameters.
-enum JSONValue: Codable, Hashable {
+public enum JSONValue: Codable, Hashable {
     case number(Double)
     case string(String)
     case bool(Bool)
     case null
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if c.decodeNil() { self = .null }
         else if let b = try? c.decode(Bool.self) { self = .bool(b) }
@@ -16,7 +16,7 @@ enum JSONValue: Codable, Hashable {
         else { self = .null }
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var c = encoder.singleValueContainer()
         switch self {
         case .number(let d): try c.encode(d)
@@ -26,7 +26,7 @@ enum JSONValue: Codable, Hashable {
         }
     }
 
-    var double: Double? {
+    public var double: Double? {
         switch self {
         case .number(let d): return d
         case .string(let s): return Double(s)
@@ -35,9 +35,9 @@ enum JSONValue: Codable, Hashable {
         }
     }
 
-    var bool: Bool { if case .bool(let b) = self { return b }; return (double ?? 0) != 0 }
+    public var bool: Bool { if case .bool(let b) = self { return b }; return (double ?? 0) != 0 }
 
-    var string: String {
+    public var string: String {
         switch self {
         case .string(let s): return s
         case .number(let d): return d.formatted()
@@ -47,19 +47,19 @@ enum JSONValue: Codable, Hashable {
     }
 }
 
-struct ServerStatus: Codable {
-    let version: String
-    let exchange: String
-    let exchangeOk: Bool
-    let exchangeError: String?
-    let engineError: String?
-    let liveTradingAllowed: Bool
-    let lastTick: Int64?
-    let tickSeconds: Int
+public struct ServerStatus: Codable {
+    public let version: String
+    public let exchange: String
+    public let exchangeOk: Bool
+    public let exchangeError: String?
+    public let engineError: String?
+    public let liveTradingAllowed: Bool
+    public let lastTick: Int64?
+    public let tickSeconds: Int
     /// Exchange fee per order as a fraction (0.0009 = 0.09 %); older agents don't send it.
-    let takerFee: Double?
+    public let takerFee: Double?
     /// Whether the agent has an Anthropic API key for the "AI decides" strategy (nil: older agent).
-    let aiConfigured: Bool?
+    public let aiConfigured: Bool?
 
     enum CodingKeys: String, CodingKey {
         case version, exchange
@@ -74,35 +74,35 @@ struct ServerStatus: Codable {
     }
 }
 
-struct CurrencyTotal: Codable, Identifiable {
-    let currency: String
-    let realized: Double
-    let unrealized: Double
-    let today: Double
-    let invested: Double
-    let total: Double
+public struct CurrencyTotal: Codable, Identifiable {
+    public let currency: String
+    public let realized: Double
+    public let unrealized: Double
+    public let today: Double
+    public let invested: Double
+    public let total: Double
     /// Exchange fees paid so far; older agents don't send it.
-    let fees: Double?
-    var id: String { currency }
+    public let fees: Double?
+    public var id: String { currency }
 }
 
-struct OtherModeTotal: Codable {
-    let currency: String
-    let total: Double
+public struct OtherModeTotal: Codable {
+    public let currency: String
+    public let total: Double
 }
 
-struct Summary: Codable {
-    let currencies: [CurrencyTotal]
+public struct Summary: Codable {
+    public let currencies: [CurrencyTotal]
     /// "paper" or "live" – the mode the numbers above belong to (older agents mix both and send nothing).
-    let mode: String?
+    public let mode: String?
     /// The other mode's result per currency, and how many trades it has.
-    let otherMode: [OtherModeTotal]?
-    let otherModeTrades: Int?
-    let botsTotal: Int
-    let botsActive: Int
-    let openPositions: Int
-    let maxOpenPositions: Int?
-    let tradesCount: Int
+    public let otherMode: [OtherModeTotal]?
+    public let otherModeTrades: Int?
+    public let botsTotal: Int
+    public let botsActive: Int
+    public let openPositions: Int
+    public let maxOpenPositions: Int?
+    public let tradesCount: Int
 
     enum CodingKeys: String, CodingKey {
         case currencies, mode
@@ -117,20 +117,20 @@ struct Summary: Codable {
 }
 
 /// One open trade – or, as `Bot.position`, all of a bot's trades summed up.
-struct BotPosition: Codable, Equatable, Identifiable {
-    let id: String? // agent 1.13+; a bot can hold several trades at once
-    let qty: Double
-    let cost: Double
-    let entryPrice: Double
-    let openedAt: Int64
-    let value: Double
-    let unrealizedPnl: Double
-    let unrealizedPct: Double
-    let paper: Bool?
+public struct BotPosition: Codable, Equatable, Identifiable {
+    public let id: String? // agent 1.13+; a bot can hold several trades at once
+    public let qty: Double
+    public let cost: Double
+    public let entryPrice: Double
+    public let openedAt: Int64
+    public let value: Double
+    public let unrealizedPnl: Double
+    public let unrealizedPct: Double
+    public let paper: Bool?
     // per trade (agent 1.13+): the price its sale waits for, its stop, or the strategy's note
-    let sellPrice: Double?
-    let stopPrice: Double?
-    let note: String?
+    public let sellPrice: Double?
+    public let stopPrice: Double?
+    public let note: String?
 
     enum CodingKeys: String, CodingKey {
         case id, qty, cost, value, paper, note
@@ -143,9 +143,9 @@ struct BotPosition: Codable, Equatable, Identifiable {
     }
 }
 
-struct MarketInfo: Codable, Equatable {
-    let price: Double
-    let change24h: Double
+public struct MarketInfo: Codable, Equatable {
+    public let price: Double
+    public let change24h: Double
 
     enum CodingKeys: String, CodingKey {
         case price
@@ -154,15 +154,15 @@ struct MarketInfo: Codable, Equatable {
 }
 
 /// The prices a bot waits for – a buy below, a sale above, the stop below – or a note when there is no fixed price.
-struct BotTargets: Codable, Equatable {
-    let buyPrice: Double?
-    let sellPrice: Double?
-    let stopPrice: Double?
-    let note: String?
+public struct BotTargets: Codable, Equatable {
+    public let buyPrice: Double?
+    public let sellPrice: Double?
+    public let stopPrice: Double?
+    public let note: String?
     // with open trades a further buy needs both: the strategy's own signal and the distance to the open trades
     // (agent 1.15+); `buyPrice` is the stricter of the two
-    let signalPrice: Double?
-    let spacingPrice: Double?
+    public let signalPrice: Double?
+    public let spacingPrice: Double?
 
     enum CodingKeys: String, CodingKey {
         case buyPrice = "buy_price"
@@ -175,43 +175,43 @@ struct BotTargets: Codable, Equatable {
 }
 
 /// How far the price still has to move until the bot trades – what the card shows first.
-struct BotGoal {
-    enum Kind { case buy, sell, trailingStart, trailingStop }
+public struct BotGoal {
+    public enum Kind { case buy, sell, trailingStart, trailingStop }
 
-    let kind: Kind
-    let target: Double
-    let percent: Double // target relative to the current price
-    let reached: Bool
+    public let kind: Kind
+    public let target: Double
+    public let percent: Double // target relative to the current price
+    public let reached: Bool
 }
 
-struct Bot: Codable, Identifiable, Equatable {
-    let id: Int
-    let name: String
-    let strategy: String
-    let strategyName: String
-    let strategyIcon: String
-    let symbol: String
-    let baseCurrency: String
-    let quoteCurrency: String
-    let params: [String: JSONValue]
-    let enabled: Bool
-    let paper: Bool
-    let paperRequested: Bool
-    let status: String
-    let statusError: Bool?
-    let hint: String? // e.g. a buy signal the limits blocked – shown until the limits allow it
-    let targets: BotTargets? // what the bot waits for (agent 1.12+)
-    let lastCheck: Int64?
-    let createdAt: Int64
-    let pendingOrder: Bool
-    let position: BotPosition? // all open trades summed up
-    let positions: [BotPosition]? // the open trades one by one (agent 1.13+)
-    let maxTrades: Int? // how many trades the bot may hold at once (agent 1.13+)
-    let realizedPnl: Double
-    let tradesCount: Int
-    let wins: Int
-    let losses: Int
-    let market: MarketInfo?
+public struct Bot: Codable, Identifiable, Equatable {
+    public let id: Int
+    public let name: String
+    public let strategy: String
+    public let strategyName: String
+    public let strategyIcon: String
+    public let symbol: String
+    public let baseCurrency: String
+    public let quoteCurrency: String
+    public let params: [String: JSONValue]
+    public let enabled: Bool
+    public let paper: Bool
+    public let paperRequested: Bool
+    public let status: String
+    public let statusError: Bool?
+    public let hint: String? // e.g. a buy signal the limits blocked – shown until the limits allow it
+    public let targets: BotTargets? // what the bot waits for (agent 1.12+)
+    public let lastCheck: Int64?
+    public let createdAt: Int64
+    public let pendingOrder: Bool
+    public let position: BotPosition? // all open trades summed up
+    public let positions: [BotPosition]? // the open trades one by one (agent 1.13+)
+    public let maxTrades: Int? // how many trades the bot may hold at once (agent 1.13+)
+    public let realizedPnl: Double
+    public let tradesCount: Int
+    public let wins: Int
+    public let losses: Int
+    public let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
         case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market
@@ -229,17 +229,17 @@ struct Bot: Codable, Identifiable, Equatable {
         case tradesCount = "trades_count"
     }
 
-    var totalPnl: Double { realizedPnl + (position?.unrealizedPnl ?? 0) }
+    public var totalPnl: Double { realizedPnl + (position?.unrealizedPnl ?? 0) }
 
     /// The open trades one by one – older agents only send the single position.
-    var openTrades: [BotPosition] { positions ?? (position.map { [$0] } ?? []) }
+    public var openTrades: [BotPosition] { positions ?? (position.map { [$0] } ?? []) }
 
     /// True when the bot may hold more than one trade (or does) – the card then lists them.
-    var tradesMode: Bool { (maxTrades ?? 1) > 1 || openTrades.count > 1 }
+    public var tradesMode: Bool { (maxTrades ?? 1) > 1 || openTrades.count > 1 }
 
     /// The next trade trigger with a fixed price: the buy price while waiting, the sale (or the trailing stop) with a
     /// position. Nil for strategies without one (AI decides, the savings plan's next instalment) or old agents.
-    var goal: BotGoal? {
+    public var goal: BotGoal? {
         guard let targets, let price = market?.price, price > 0 else { return nil }
         let kind: BotGoal.Kind
         let target: Double
@@ -263,29 +263,29 @@ struct Bot: Codable, Identifiable, Equatable {
     }
 }
 
-struct Trade: Codable, Identifiable, Equatable {
+public struct Trade: Codable, Identifiable, Equatable {
     /// A sale's result relative to what the sold coins cost (proceeds after fees minus the result = their cost).
-    var pnlPct: Double? {
+    public var pnlPct: Double? {
         guard let pnl, quoteAmount - pnl > 0 else { return nil }
         return pnl / (quoteAmount - pnl) * 100
     }
 
-    let id: Int
-    let botId: Int
-    let botName: String
-    let symbol: String
-    let side: String
-    let price: Double
-    let baseQty: Double
-    let quoteAmount: Double
-    let fee: Double
-    let pnl: Double?
-    let orderId: String?
-    let paper: Bool
-    let reason: String
-    let createdAt: Int64
+    public let id: Int
+    public let botId: Int
+    public let botName: String
+    public let symbol: String
+    public let side: String
+    public let price: Double
+    public let baseQty: Double
+    public let quoteAmount: Double
+    public let fee: Double
+    public let pnl: Double?
+    public let orderId: String?
+    public let paper: Bool
+    public let reason: String
+    public let createdAt: Int64
     /// The trade (position) a buy opened or added to and a sale closed – agent 1.17+; nil for older trades.
-    let positionId: String?
+    public let positionId: String?
 
     enum CodingKeys: String, CodingKey {
         case id, symbol, side, price, fee, pnl, paper, reason
@@ -298,49 +298,49 @@ struct Trade: Codable, Identifiable, Equatable {
         case createdAt = "created_at"
     }
 
-    var isBuy: Bool { side == "buy" }
-    var base: String { String(symbol.split(separator: "-").first ?? "") }
-    var quote: String { String(symbol.split(separator: "-").last ?? "EUR") }
-    var date: Date { Date(ms: createdAt) }
+    public var isBuy: Bool { side == "buy" }
+    public var base: String { String(symbol.split(separator: "-").first ?? "") }
+    public var quote: String { String(symbol.split(separator: "-").last ?? "EUR") }
+    public var date: Date { Date(ms: createdAt) }
 }
 
-struct SelectOption: Codable, Hashable {
-    let value: String
-    let label: String
+public struct SelectOption: Codable, Hashable {
+    public let value: String
+    public let label: String
 }
 
-struct StrategyParam: Codable, Identifiable {
-    let key: String
-    let label: String
-    let type: String
-    let `default`: JSONValue
-    let help: String?
-    let min: Double?
-    let max: Double?
-    let step: Double?
-    let options: [SelectOption]?
-    let unit: String?
-    var id: String { key }
+public struct StrategyParam: Codable, Identifiable {
+    public let key: String
+    public let label: String
+    public let type: String
+    public let `default`: JSONValue
+    public let help: String?
+    public let min: Double?
+    public let max: Double?
+    public let step: Double?
+    public let options: [SelectOption]?
+    public let unit: String?
+    public var id: String { key }
 }
 
-struct Strategy: Codable, Identifiable {
-    let key: String
-    let name: String
-    let description: String
-    let icon: String
-    let params: [StrategyParam]
-    var id: String { key }
+public struct Strategy: Codable, Identifiable {
+    public let key: String
+    public let name: String
+    public let description: String
+    public let icon: String
+    public let params: [StrategyParam]
+    public var id: String { key }
 }
 
 /// One answer of Claude for an "AI decides" bot.
-struct AiDecision: Codable, Identifiable {
-    let id: Int
-    let action: String // buy | wait | hold | sell
-    let confidence: Int // 0–100
-    let reason: String
-    let price: Double
-    let profitPct: Double?
-    let createdAt: Int64
+public struct AiDecision: Codable, Identifiable {
+    public let id: Int
+    public let action: String // buy | wait | hold | sell
+    public let confidence: Int // 0–100
+    public let reason: String
+    public let price: Double
+    public let profitPct: Double?
+    public let createdAt: Int64
 
     enum CodingKeys: String, CodingKey {
         case id, action, confidence, reason, price
@@ -349,12 +349,12 @@ struct AiDecision: Codable, Identifiable {
     }
 }
 
-struct BotEvent: Codable, Identifiable {
-    let id: Int
-    let botId: Int?
-    let level: String
-    let message: String
-    let createdAt: Int64
+public struct BotEvent: Codable, Identifiable {
+    public let id: Int
+    public let botId: Int?
+    public let level: String
+    public let message: String
+    public let createdAt: Int64
 
     enum CodingKeys: String, CodingKey {
         case id, level, message
@@ -363,23 +363,23 @@ struct BotEvent: Codable, Identifiable {
     }
 }
 
-struct Balance: Codable, Identifiable {
-    let currency: String
-    let available: Double
-    let total: Double
-    var id: String { currency }
+public struct Balance: Codable, Identifiable {
+    public let currency: String
+    public let available: Double
+    public let total: Double
+    public var id: String { currency }
 }
 
 /// Revolut X connection as configured on the agent. The private key never leaves the agent.
-struct ExchangeInfo: Codable, Equatable {
-    let source: String // "env" (.env on the agent), "app" (set up via this app) or "none"
-    let apiKeyMasked: String?
-    let publicKey: String?
-    let pendingPublicKey: String?
-    let mode: String // "revolutx" | "mock"
-    let connected: Bool
-    let error: String?
-    let apiKeysUrl: String
+public struct ExchangeInfo: Codable, Equatable {
+    public let source: String // "env" (.env on the agent), "app" (set up via this app) or "none"
+    public let apiKeyMasked: String?
+    public let publicKey: String?
+    public let pendingPublicKey: String?
+    public let mode: String // "revolutx" | "mock"
+    public let connected: Bool
+    public let error: String?
+    public let apiKeysUrl: String
 
     enum CodingKeys: String, CodingKey {
         case source, mode, connected, error
@@ -390,16 +390,16 @@ struct ExchangeInfo: Codable, Equatable {
     }
 }
 
-struct PublicIP: Codable { let ip: String }
+public struct PublicIP: Codable { public let ip: String }
 
 /// Response of restoring a backup on the agent.
-struct RestoreResult: Decodable {
-    let bots: Int
-    let trades: Int
-    let liveTradingDisabled: Bool
-    let credentialsRestored: Bool
-    let createdAt: Int64?
-    let agentVersion: String?
+public struct RestoreResult: Decodable {
+    public let bots: Int
+    public let trades: Int
+    public let liveTradingDisabled: Bool
+    public let credentialsRestored: Bool
+    public let createdAt: Int64?
+    public let agentVersion: String?
 
     enum CodingKeys: String, CodingKey {
         case bots, trades
@@ -411,13 +411,13 @@ struct RestoreResult: Decodable {
 }
 
 /// Response of switching the live mode; switching back to paper sells all open live positions.
-struct LiveSwitchResult: Decodable {
-    struct ClosedPosition: Decodable, Identifiable {
-        let botId: Int
-        let botName: String
-        let ok: Bool
-        let message: String
-        var id: Int { botId }
+public struct LiveSwitchResult: Decodable {
+    public struct ClosedPosition: Decodable, Identifiable {
+        public let botId: Int
+        public let botName: String
+        public let ok: Bool
+        public let message: String
+        public var id: Int { botId }
 
         enum CodingKeys: String, CodingKey {
             case ok, message
@@ -426,7 +426,7 @@ struct LiveSwitchResult: Decodable {
         }
     }
 
-    let closedPositions: [ClosedPosition]
+    public let closedPositions: [ClosedPosition]
 
     enum CodingKeys: String, CodingKey {
         case closedPositions = "closed_positions"
@@ -434,12 +434,12 @@ struct LiveSwitchResult: Decodable {
 }
 
 /// Global risk limits enforced by the agent engine.
-struct Limits: Codable, Equatable {
-    var maxOpenPositions: Int
-    var maxTotalInvested: Double
-    var onePositionPerSymbol: Bool
-    var openPositions: Int?
-    var invested: Double?
+public struct Limits: Codable, Equatable {
+    public var maxOpenPositions: Int
+    public var maxTotalInvested: Double
+    public var onePositionPerSymbol: Bool
+    public var openPositions: Int?
+    public var invested: Double?
 
     enum CodingKeys: String, CodingKey {
         case maxOpenPositions = "max_open_positions"
@@ -449,7 +449,7 @@ struct Limits: Codable, Equatable {
         case invested
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(maxOpenPositions, forKey: .maxOpenPositions)
         try c.encode(maxTotalInvested, forKey: .maxTotalInvested)
@@ -458,20 +458,34 @@ struct Limits: Codable, Equatable {
 }
 
 /// Fees the simulation (paper mode) charges, as fractions (0.0009 = 0.09 %).
-struct PaperFees: Codable, Equatable {
-    var buy: Double
-    var sell: Double
+public struct PaperFees: Codable, Equatable {
+    public var buy: Double
+    public var sell: Double
+
+    public init(buy: Double, sell: Double) {
+        self.buy = buy
+        self.sell = sell
+    }
 }
 
-struct BotInput: Encodable {
-    var name: String
-    var strategy: String
-    var symbol: String
-    var params: [String: JSONValue]
-    var enabled: Bool
-    var paper: Bool
+public struct BotInput: Encodable {
+    public var name: String
+    public var strategy: String
+    public var symbol: String
+    public var params: [String: JSONValue]
+    public var enabled: Bool
+    public var paper: Bool
+
+    public init(name: String, strategy: String, symbol: String, params: [String: JSONValue], enabled: Bool, paper: Bool) {
+        self.name = name
+        self.strategy = strategy
+        self.symbol = symbol
+        self.params = params
+        self.enabled = enabled
+        self.paper = paper
+    }
 }
 
 extension Date {
-    init(ms: Int64) { self.init(timeIntervalSince1970: TimeInterval(ms) / 1000) }
+    public init(ms: Int64) { self.init(timeIntervalSince1970: TimeInterval(ms) / 1000) }
 }

@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import DipAgentKit
 import SwiftUI
 
 /// Plain AppKit entry point: the UI lives in a status-bar panel managed by the AppDelegate.
@@ -31,6 +32,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if SnapshotRunner.runIfRequested(store: store) { return }
+
+        // the Mac wakes up (lid opened): the network needs a moment, then refresh or reconnect right away
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                await self?.store.refreshNow()
+            }
+        }
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.target = self
@@ -98,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         setIconHighlighted(true)
-        store.panelVisible = true
+        store.isVisible = true
         if opening { store.refreshIfStale() } // fresh numbers (or an immediate reconnect) when the panel opens
         // No control starts focused (otherwise AppKit puts the focus ring on the first key view – the refresh button).
         // SwiftUI may assign its initial focus a runloop later, so clear it again then.
@@ -109,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func hidePanel() {
-        store.panelVisible = false
+        store.isVisible = false
         panel?.orderOut(nil)
         setIconHighlighted(false)
     }

@@ -1,4 +1,5 @@
 import AppKit
+import DipAgentKit
 import SwiftUI
 
 struct SettingsView: View {

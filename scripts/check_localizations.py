@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Checks that every user-facing English string in the Swift sources has a translation in each
-``Resources/<lang>.lproj/Localizable.strings`` (and that no translations are left over).
+"""Checks that every user-facing English string in the Swift sources of both apps (macOS, iPhone) and the
+shared package has a translation in each ``shared/Localization/<lang>.lproj/Localizable.strings`` (and that no
+translations are left over).
 
 English is the development language: the source strings themselves are the keys. Interpolations
 (``\\(value)``) become ``%@`` in the key, so only interpolate *Strings* into localized texts.
@@ -16,8 +17,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = ROOT / "Sources"
-RESOURCES = ROOT / "Resources"
+SOURCES = [ROOT / "shared" / "DipAgentKit" / "Sources", ROOT / "macos" / "Sources", ROOT / "ios" / "DipAgent"]
+RESOURCES = ROOT / "shared" / "Localization"
 
 # literals that are not UI text (identifiers, protocol values, product names …)
 IGNORE = {
@@ -100,7 +101,7 @@ def is_ui_text(literal: str) -> bool:
 
 def source_keys() -> dict[str, str]:
     keys: dict[str, str] = {}
-    for path in sorted(SOURCES.rglob("*.swift")):
+    for path in sorted(p for root in SOURCES if root.exists() for p in root.rglob("*.swift")):
         if path.name == "Snapshot.swift":
             continue
         lines = path.read_text().splitlines()

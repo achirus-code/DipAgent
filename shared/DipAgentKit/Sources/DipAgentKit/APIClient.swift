@@ -1,13 +1,13 @@
 import Foundation
 
-enum APIError: LocalizedError {
+public enum APIError: LocalizedError {
     case invalidURL
     case unauthorized
     /// The agent answered 404 for a route it doesn't have – it runs an older version than this app expects.
     case outdatedAgent
     case http(Int, String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidURL: return String(localized: "Invalid agent address")
         case .unauthorized: return String(localized: "Invalid token – please check the settings")
@@ -17,12 +17,12 @@ enum APIError: LocalizedError {
     }
 }
 
-struct APIClient {
+public struct APIClient {
     /// Default DipAgent agent port – used whenever the address has no explicit port.
-    static let defaultPort = 3470
+    public static let defaultPort = 3470
 
-    let baseURL: URL
-    let token: String
+    public let baseURL: URL
+    public let token: String
 
     private static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
@@ -31,7 +31,7 @@ struct APIClient {
         return URLSession(configuration: config)
     }()
 
-    init(server: String, token: String) throws {
+    public init(server: String, token: String) throws {
         var raw = server.trimmingCharacters(in: .whitespacesAndNewlines)
         if raw.isEmpty { throw APIError.invalidURL }
         let explicitHTTPS = raw.lowercased().hasPrefix("https://")
@@ -47,24 +47,24 @@ struct APIClient {
         self.token = token
     }
 
-    func get<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
+    public func get<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
         try await request("GET", path, query: query, body: Optional<BotInput>.none)
     }
 
-    func post<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
+    public func post<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
         try await request("POST", path, query: query, body: Optional<BotInput>.none)
     }
 
-    func send<T: Decodable, B: Encodable>(_ method: String, _ path: String, body: B) async throws -> T {
+    public func send<T: Decodable, B: Encodable>(_ method: String, _ path: String, body: B) async throws -> T {
         try await request(method, path, body: body)
     }
 
-    func delete(_ path: String, query: [String: String] = [:]) async throws {
+    public func delete(_ path: String, query: [String: String] = [:]) async throws {
         _ = try await raw("DELETE", path, query: query, body: nil)
     }
 
     /// Downloads a file (e.g. a backup); returns the bytes and the file name the agent suggests.
-    func download(_ path: String) async throws -> (Data, String?) {
+    public func download(_ path: String) async throws -> (Data, String?) {
         let (data, response) = try await perform("GET", path, query: [:], body: nil, contentType: nil)
         let disposition = response?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
         let name = disposition.split(separator: ";")
@@ -76,7 +76,7 @@ struct APIClient {
     }
 
     /// Uploads a file as the request body (e.g. a backup to restore).
-    func upload<T: Decodable>(_ path: String, data: Data, contentType: String) async throws -> T {
+    public func upload<T: Decodable>(_ path: String, data: Data, contentType: String) async throws -> T {
         let (response, _) = try await perform("POST", path, query: [:], body: data, contentType: contentType)
         return try JSONDecoder().decode(T.self, from: response)
     }

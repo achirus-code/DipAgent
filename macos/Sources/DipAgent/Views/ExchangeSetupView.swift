@@ -1,4 +1,5 @@
 import AppKit
+import DipAgentKit
 import SwiftUI
 
 /// Settings section: Revolut X connection status + entry point to the setup.

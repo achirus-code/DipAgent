@@ -1,3 +1,4 @@
+import DipAgentKit
 import SwiftUI
 
 /// Global risk limits: how many positions may be open, how much capital, one bot per pair.

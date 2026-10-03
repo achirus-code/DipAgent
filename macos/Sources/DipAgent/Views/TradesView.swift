@@ -1,3 +1,4 @@
+import DipAgentKit
 import SwiftUI
 
 struct TradesView: View {

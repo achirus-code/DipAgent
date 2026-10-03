@@ -1,3 +1,4 @@
+import DipAgentKit
 import SwiftUI
 
 /// Fees the simulation charges. Prefilled with Revolut X (buy 0 %, sell 0.09 %); changing them rebooks the

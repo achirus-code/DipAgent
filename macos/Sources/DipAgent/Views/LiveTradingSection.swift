@@ -1,3 +1,4 @@
+import DipAgentKit
 import SwiftUI
 
 /// Global switch between paper mode (default) and live trading on Revolut X.

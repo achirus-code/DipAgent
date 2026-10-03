@@ -1,11 +1,9 @@
 import AppKit
+import DipAgentKit
 
 /// App language: follows macOS unless the user picks one in Settings → App → Language.
 /// macOS reads the per-app `AppleLanguages` preference at launch, so a change needs a restart.
-enum AppLanguage {
-    /// Language the running app actually uses ("en" or "de") – also sent to the agent as Accept-Language.
-    static let current: String = Bundle.main.preferredLocalizations.first ?? "en"
-
+extension AppLanguage {
     /// The override that was active when the app was launched ("" = system).
     static let atLaunch: String = override ?? ""
 

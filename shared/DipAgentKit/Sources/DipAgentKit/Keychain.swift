@@ -1,11 +1,11 @@
 import Foundation
 import Security
 
-/// Stores the agent API token in the user's login keychain.
-enum Keychain {
+/// Stores the agent API token in the keychain.
+public enum Keychain {
     private static let service = "de.achirus.DipAgent"
 
-    static func get(_ account: String) -> String? {
+    public static func get(_ account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -19,7 +19,7 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
-    static func set(_ value: String, for account: String) {
+    public static func set(_ value: String, for account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -29,6 +29,10 @@ enum Keychain {
         guard !value.isEmpty else { return }
         var add = query
         add[kSecValueData as String] = Data(value.utf8)
+        #if os(iOS)
+        // the background refresh runs while the iPhone is locked – the token must be readable then
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        #endif
         SecItemAdd(add as CFDictionary, nil)
     }
 }

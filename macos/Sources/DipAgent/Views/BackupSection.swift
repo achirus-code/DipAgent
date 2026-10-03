@@ -1,3 +1,4 @@
+import DipAgentKit
 import SwiftUI
 
 /// Export the agent's data (bots, trades, settings, Revolut X key) as a file and restore it – e.g. to move to

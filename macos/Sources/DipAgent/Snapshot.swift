@@ -1,4 +1,5 @@
 import AppKit
+import DipAgentKit
 import SwiftUI
 
 /// Developer aid: `DipAgent --snapshot <dir> -serverURL <url> -apiToken <token> [-snapshotHeight 1200]`

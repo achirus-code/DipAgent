@@ -1,28 +1,28 @@
-import AppKit
 import Foundation
 import Observation
-import ServiceManagement
-import UniformTypeIdentifiers
 import UserNotifications
 
-enum ConnectionState: Equatable {
+public enum ConnectionState: Equatable {
     case notConfigured
     case connecting
     case connected
     case failed(String)
 }
 
+/// The app's view of the agent: connection, polling, the data the views show and every action. Shared by the
+/// macOS and the iPhone app – what only one platform needs (file dialogs, launch at login, wake-up, the
+/// background refresh) lives in the apps.
 @MainActor
 @Observable
-final class AppStore {
+public final class AppStore {
     // Settings
-    var serverURL: String = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+    public internal(set) var serverURL: String = UserDefaults.standard.string(forKey: "serverURL") ?? ""
     // `-apiToken <t>` on the command line overrides the keychain (used by the snapshot tool)
-    var token: String = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["apiToken"] as? String
+    public internal(set) var token: String = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["apiToken"] as? String
         ?? Keychain.get("apiToken") ?? ""
     /// Seconds between two refreshes – one of `refreshIntervals`.
-    static let refreshIntervals: [Double] = [30, 60, 120, 300]
-    var refreshInterval: Double = {
+    public static let refreshIntervals: [Double] = [30, 60, 120, 300]
+    public var refreshInterval: Double = {
         let v = UserDefaults.standard.double(forKey: "refreshInterval")
         // Older versions allowed 5 s / 15 s – snap to the nearest option that still exists.
         return refreshIntervals.contains(v) ? v : (v > 0 && v < 30 ? 30 : 60)
@@ -32,7 +32,7 @@ final class AppStore {
             startPolling()
         }
     }
-    var notificationsEnabled: Bool = UserDefaults.standard.object(forKey: "notifications") as? Bool ?? true {
+    public var notificationsEnabled: Bool = UserDefaults.standard.object(forKey: "notifications") as? Bool ?? true {
         didSet {
             UserDefaults.standard.set(notificationsEnabled, forKey: "notifications")
             if notificationsEnabled { requestNotificationPermission() }
@@ -40,50 +40,56 @@ final class AppStore {
     }
 
     // Data from the agent
-    var connection: ConnectionState = .notConfigured
-    var status: ServerStatus?
-    var summary: Summary?
-    var bots: [Bot] = []
-    var trades: [Trade] = []
-    var strategies: [Strategy] = []
-    var pairs: [String] = []
-    var balances: [Balance] = []
-    var limits: Limits?
-    var paperFees: PaperFees?
-    var exchangeInfo: ExchangeInfo?
-    var lastUpdate: Date?
-    /// Set by the AppDelegate. Balances are only fetched while the panel is open – nobody sees them otherwise,
-    /// and every fetch is a request to Revolut X.
-    var panelVisible = false
+    public internal(set) var connection: ConnectionState = .notConfigured
+    public internal(set) var status: ServerStatus?
+    public internal(set) var summary: Summary?
+    public internal(set) var bots: [Bot] = []
+    public internal(set) var trades: [Trade] = []
+    public internal(set) var strategies: [Strategy] = []
+    public internal(set) var pairs: [String] = []
+    public internal(set) var balances: [Balance] = []
+    public internal(set) var limits: Limits?
+    public internal(set) var paperFees: PaperFees?
+    public internal(set) var exchangeInfo: ExchangeInfo?
+    public internal(set) var lastUpdate: Date?
+    /// Set by the app: the panel (macOS) or the app (iPhone) is on screen. Balances are only fetched then –
+    /// nobody sees them otherwise, and every fetch is a request to Revolut X.
+    public var isVisible = false
     private var balancesUpdatedAt: Date?
-    var isRefreshing = false
-    /// While true (Revolut X setup) the panel stays open when the user clicks elsewhere.
-    @ObservationIgnored var keepPanelOpen = false
+    public internal(set) var isRefreshing = false
+    /// macOS: while true (Revolut X setup, file dialogs) the panel stays open when the user clicks elsewhere.
+    @ObservationIgnored public var keepPanelOpen = false
 
     private var client: APIClient?
     private var pollTask: Task<Void, Never>?
-    private var lastSeenTradeId: Int?
+    /// The newest trade the user has been told about. The iPhone keeps it across launches, so trades made while
+    /// the app was closed are reported by the background refresh or on the next start.
+    private var lastSeenTradeId: Int? {
+        didSet { if persistsLastSeenTrade { UserDefaults.standard.set(lastSeenTradeId, forKey: "lastSeenTradeId") } }
+    }
+    private let persistsLastSeenTrade: Bool
 
     /// Seconds until the next reconnect attempt while the agent is unreachable (5 s, doubling up to 60 s).
     private var retryDelay: Double = 5
 
-    init() {
+    public init(persistLastSeenTrade: Bool = false) {
+        persistsLastSeenTrade = persistLastSeenTrade
+        if persistLastSeenTrade {
+            lastSeenTradeId = UserDefaults.standard.object(forKey: "lastSeenTradeId") as? Int
+        }
         // after "Disconnect" the app stays disconnected until the user connects again
         if !serverURL.isEmpty && !token.isEmpty && !UserDefaults.standard.bool(forKey: "userDisconnected") {
             Task { await connect() }
         }
-        // the Mac wakes up (lid opened): the network needs a moment, then refresh or reconnect right away
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(3))
-                await self?.refreshNow()
-            }
-        }
+    }
+
+    private var isConfigured: Bool {
+        !serverURL.isEmpty && !token.isEmpty && !UserDefaults.standard.bool(forKey: "userDisconnected")
     }
 
     /// Refresh when connected, otherwise try to reconnect immediately – used on wake-up and when the panel opens.
-    func refreshNow() async {
-        guard !serverURL.isEmpty, !token.isEmpty, !UserDefaults.standard.bool(forKey: "userDisconnected") else { return }
+    public func refreshNow() async {
+        guard isConfigured else { return }
         retryDelay = 5
         if connection == .connected {
             await refresh()
@@ -94,12 +100,30 @@ final class AppStore {
     }
 
     /// Like refreshNow, but only if the data is older than a few seconds (the panel opens often).
-    func refreshIfStale() {
+    public func refreshIfStale() {
         if connection == .connected, let lastUpdate, Date().timeIntervalSince(lastUpdate) < 10 { return }
         Task { await refreshNow() }
     }
 
-    var menuBarSymbol: String {
+    /// iPhone: the app comes to the front – fresh data right away, then the regular polling again.
+    public func resume() async {
+        guard isConfigured else { return }
+        retryDelay = 5
+        if connection == .connected {
+            await refresh()
+        } else if connection != .connecting {
+            await handshake()
+        }
+        startPolling()
+    }
+
+    /// iPhone: the app goes to the background – no polling there (the system's background refresh takes over).
+    public func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
+    }
+
+    public var menuBarSymbol: String {
         switch connection {
         case .connecting: return "arrow.triangle.2.circlepath"
         case .failed: return "exclamationmark.triangle"
@@ -108,11 +132,11 @@ final class AppStore {
         }
     }
 
-    var isConnected: Bool { connection == .connected }
+    public var isConnected: Bool { connection == .connected }
 
     // MARK: - Connection
 
-    func saveConnection(server: String, token: String) async {
+    public func saveConnection(server: String, token: String) async {
         serverURL = server.trimmingCharacters(in: .whitespacesAndNewlines)
         self.token = token.trimmingCharacters(in: .whitespacesAndNewlines)
         UserDefaults.standard.set(serverURL, forKey: "serverURL")
@@ -121,7 +145,7 @@ final class AppStore {
     }
 
     /// User-triggered (or first) connect: handshake, then the polling loop keeps the connection alive.
-    func connect() async {
+    public func connect() async {
         pollTask?.cancel()
         retryDelay = 5
         await handshake()
@@ -152,7 +176,7 @@ final class AppStore {
         }
     }
 
-    func disconnect() {
+    public func disconnect() {
         UserDefaults.standard.set(true, forKey: "userDisconnected")
         pollTask?.cancel()
         client = nil
@@ -183,7 +207,7 @@ final class AppStore {
 
     // MARK: - Data
 
-    func refresh() async {
+    public func refresh() async {
         guard let client, !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
@@ -203,7 +227,7 @@ final class AppStore {
             bots = newBots
             notifyAboutNewTrades(newTrades)
             trades = newTrades
-            if panelVisible || balancesUpdatedAt.map({ Date().timeIntervalSince($0) > 600 }) ?? true {
+            if isVisible || balancesUpdatedAt.map({ Date().timeIntervalSince($0) > 600 }) ?? true {
                 if let fresh: [Balance] = try? await client.get("/balances") {
                     balances = fresh
                     balancesUpdatedAt = Date()
@@ -220,28 +244,47 @@ final class AppStore {
         }
     }
 
-    func events(for botId: Int) async -> [BotEvent] {
+    /// iPhone background refresh: only the latest trades and the bots – enough to tell about new trades and
+    /// blocked buys within the few seconds the system grants. Returns false when the agent was not reachable.
+    public func backgroundRefresh() async -> Bool {
+        guard isConfigured else { return false }
+        do {
+            let client = try self.client ?? APIClient(server: serverURL, token: token)
+            self.client = client
+            async let b: [Bot] = client.get("/bots")
+            async let t: [Trade] = client.get("/trades", query: ["limit": "50"])
+            let (newBots, newTrades) = try await (b, t)
+            notifyAboutBlockedBuys(newBots)
+            bots = newBots
+            notifyAboutNewTrades(newTrades)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    public func events(for botId: Int) async -> [BotEvent] {
         guard let client else { return [] }
         return (try? await client.get("/events", query: ["bot_id": String(botId), "limit": "50"])) ?? []
     }
 
-    func decisions(for botId: Int) async -> [AiDecision] {
+    public func decisions(for botId: Int) async -> [AiDecision] {
         guard let client else { return [] }
         return (try? await client.get("/bots/\(botId)/decisions", query: ["limit": "100"])) ?? []
     }
 
     /// The trade history for the profit chart – more than the latest trades the panel keeps (agent maximum: 1000).
-    func allTrades(limit: Int) async -> [Trade]? {
+    public func allTrades(limit: Int) async -> [Trade]? {
         guard let client else { return nil }
         return try? await client.get("/trades", query: ["limit": String(limit)])
     }
 
-    func strategy(_ key: String) -> Strategy? { strategies.first { $0.key == key } }
+    public func strategy(_ key: String) -> Strategy? { strategies.first { $0.key == key } }
 
     // MARK: - Bot actions
 
     @discardableResult
-    func saveBot(id: Int?, input: BotInput) async throws -> Bot {
+    public func saveBot(id: Int?, input: BotInput) async throws -> Bot {
         guard let client else { throw APIError.invalidURL }
         let bot: Bot
         if let id {
@@ -253,13 +296,13 @@ final class AppStore {
         return bot
     }
 
-    func saveLimits(_ newLimits: Limits) async throws {
+    public func saveLimits(_ newLimits: Limits) async throws {
         guard let client else { return }
         limits = try await client.send("PUT", "/limits", body: newLimits)
         await refresh()
     }
 
-    func savePaperFees(_ fees: PaperFees) async throws {
+    public func savePaperFees(_ fees: PaperFees) async throws {
         guard let client else { return }
         paperFees = try await client.send("PUT", "/paper-fees", body: fees)
         await refresh()
@@ -269,7 +312,7 @@ final class AppStore {
 
     /// Switching on requires the explicit "LIVE" confirmation (the UI asks twice before calling this).
     @discardableResult
-    func setLiveTrading(_ enabled: Bool) async throws -> [LiveSwitchResult.ClosedPosition] {
+    public func setLiveTrading(_ enabled: Bool) async throws -> [LiveSwitchResult.ClosedPosition] {
         guard let client else { return [] }
         struct Body: Encodable { let enabled: Bool; let confirm: String? }
         let result: LiveSwitchResult = try await client.send(
@@ -281,12 +324,12 @@ final class AppStore {
 
     // MARK: - Revolut X setup
 
-    func generateKeypair() async throws {
+    public func generateKeypair() async throws {
         guard let client else { return }
         exchangeInfo = try await client.post("/exchange/keypair")
     }
 
-    func saveApiKey(_ apiKey: String) async throws {
+    public func saveApiKey(_ apiKey: String) async throws {
         guard let client else { return }
         struct Body: Encodable { let api_key: String }
         exchangeInfo = try await client.send("PUT", "/exchange/credentials", body: Body(api_key: apiKey))
@@ -294,19 +337,19 @@ final class AppStore {
         await refresh()
     }
 
-    func removeExchangeCredentials() async throws {
+    public func removeExchangeCredentials() async throws {
         guard let client else { return }
         try await client.delete("/exchange/credentials")
         await refresh()
     }
 
-    func serverPublicIP() async -> String? {
+    public func serverPublicIP() async -> String? {
         guard let client else { return nil }
         let result: PublicIP? = try? await client.get("/exchange/public-ip")
         return result?.ip
     }
 
-    func setRunning(_ bot: Bot, _ running: Bool) async throws {
+    public func setRunning(_ bot: Bot, _ running: Bool) async throws {
         guard let client else { return }
         let _: Bot = try await client.post("/bots/\(bot.id)/\(running ? "start" : "stop")")
         // the engine evaluates started bots right away – give it a moment
@@ -315,34 +358,34 @@ final class AppStore {
     }
 
     /// Sells one trade (`positionId`) or all of the bot's trades at market.
-    func closePosition(_ bot: Bot, positionId: String? = nil) async throws {
+    public func closePosition(_ bot: Bot, positionId: String? = nil) async throws {
         guard let client else { return }
         let _: Bot = try await client.post("/bots/\(bot.id)/close", query: positionId.map { ["position_id": $0] } ?? [:])
         await refresh()
     }
 
     /// Paper only: deletes the bot's simulated trades and open paper trades – its result starts at zero.
-    func resetPaper(_ bot: Bot) async throws {
+    public func resetPaper(_ bot: Bot) async throws {
         guard let client else { return }
         let _: Bot = try await client.post("/bots/\(bot.id)/reset-paper")
         await refresh()
     }
 
     /// "AI decides" only: a fresh decision from Claude right now (one extra check).
-    func askClaude(_ bot: Bot) async throws {
+    public func askClaude(_ bot: Bot) async throws {
         guard let client else { return }
         let _: Bot = try await client.post("/bots/\(bot.id)/ask")
         await refresh()
     }
 
     /// Removes the position from the agent's books without selling anything.
-    func discardPosition(_ bot: Bot, positionId: String? = nil) async throws {
+    public func discardPosition(_ bot: Bot, positionId: String? = nil) async throws {
         guard let client else { return }
         let _: Bot = try await client.post("/bots/\(bot.id)/discard", query: positionId.map { ["position_id": $0] } ?? [:])
         await refresh()
     }
 
-    func deleteBot(_ bot: Bot, force: Bool) async throws {
+    public func deleteBot(_ bot: Bot, force: Bool) async throws {
         guard let client else { return }
         try await client.delete("/bots/\(bot.id)", query: force ? ["force": "true"] : [:])
         await refresh()
@@ -350,56 +393,20 @@ final class AppStore {
 
     // MARK: - Backup
 
-    private static let backupTypes: [UTType] = [.gzip, UTType(filenameExtension: "tgz"), UTType(filenameExtension: "tar.gz")]
-        .compactMap { $0 }
-
-    /// Downloads a backup from the agent and lets the user save it. Returns nil when the dialog was cancelled.
-    func exportBackup() async throws -> URL? {
-        guard let client else { return nil }
+    /// The agent's backup (.tgz) and the file name it suggests – the app lets the user save it.
+    public func backupData() async throws -> (data: Data, suggestedName: String) {
+        guard let client else { throw APIError.invalidURL }
         let (data, suggestedName) = try await client.download("/backup")
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = suggestedName ?? "dipagent-backup.tgz"
-        panel.allowedContentTypes = Self.backupTypes
-        panel.canCreateDirectories = true
-        guard let url = runModal(panel) else { return nil }
-        try data.write(to: url, options: .atomic)
-        return url
+        return (data, suggestedName ?? "dipagent-backup.tgz")
     }
 
-    /// Lets the user pick a backup file and restores it on the agent. Returns nil when the dialog was cancelled.
-    func importBackup() async throws -> RestoreResult? {
-        guard let client else { return nil }
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = Self.backupTypes
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        guard let url = runModal(panel) else { return nil }
-        let data = try Data(contentsOf: url)
+    /// Restores a backup file on the agent – replaces all of its data.
+    public func restoreBackup(_ data: Data) async throws -> RestoreResult {
+        guard let client else { throw APIError.invalidURL }
         let result: RestoreResult = try await client.upload("/restore", data: data, contentType: "application/gzip")
         pairs = []
         await refresh()
         return result
-    }
-
-    /// Runs a file dialog in front of the panel; the panel stays open meanwhile (it would close on losing focus).
-    private func runModal(_ panel: NSSavePanel) -> URL? {
-        keepPanelOpen = true
-        defer { keepPanelOpen = false }
-        NSApp.activate(ignoringOtherApps: true)
-        return panel.runModal() == .OK ? panel.url : nil
-    }
-
-    // MARK: - Launch at login
-
-    var launchAtLogin: Bool {
-        get { SMAppService.mainApp.status == .enabled }
-        set {
-            do {
-                if newValue { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            } catch {
-                NSLog("Launch at login failed: \(error)")
-            }
-        }
     }
 
     // MARK: - Notifications
@@ -423,11 +430,21 @@ final class AppStore {
         }
     }
 
+    /// One notification per new trade – after a long break (iPhone: the app was closed) just one for all of them.
     private func notifyAboutNewTrades(_ newTrades: [Trade]) {
         let maxId = newTrades.map(\.id).max()
         defer { if let maxId { lastSeenTradeId = max(lastSeenTradeId ?? 0, maxId) } }
         guard notificationsEnabled, Bundle.main.bundleIdentifier != nil, let seen = lastSeenTradeId else { return }
-        for trade in newTrades where trade.id > seen {
+        let fresh = newTrades.filter { $0.id > seen }
+        if fresh.count > 5 {
+            let content = UNMutableNotificationContent()
+            content.title = "DipAgent"
+            content.body = String(localized: "\(String(fresh.count)) new trades")
+            content.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "trades-\(maxId ?? 0)", content: content, trigger: nil))
+            return
+        }
+        for trade in fresh {
             let content = UNMutableNotificationContent()
             content.title = trade.isBuy
                 ? String(localized: "\(trade.botName) buys \(trade.base)")

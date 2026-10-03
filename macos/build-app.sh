@@ -11,7 +11,11 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/DipAgent"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
-cp -R Resources/*.lproj "$APP/Contents/Resources/"   # localizations (en = source strings, de = translations)
+cp -R Resources/*.lproj "$APP/Contents/Resources/"   # Info.plist texts per language
+for lproj in ../shared/Localization/*.lproj; do       # app texts, shared with the iPhone app (en = source strings, de = translations)
+  mkdir -p "$APP/Contents/Resources/$(basename "$lproj")"
+  cp "$lproj"/*.strings "$APP/Contents/Resources/$(basename "$lproj")/"
+done
 
 # App icon
 ICONSET="build/AppIcon.iconset"
