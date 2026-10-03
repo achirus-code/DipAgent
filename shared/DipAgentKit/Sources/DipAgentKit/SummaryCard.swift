@@ -11,6 +11,8 @@ public struct SummaryCard: View {
     var isDemo = false
     /// Opens the profit chart window; nil hides the button.
     var showHistory: (() -> Void)?
+    /// Collapsed: only the total and today's result – the rest on demand.
+    @AppStorage("summaryExpanded") private var expanded = false
 
     public init(summary: Summary, liveAllowed: Bool, balances: [Balance] = [], bots: [Bot] = [], trades: [Trade] = [],
                 limits: Limits? = nil, isDemo: Bool = false, showHistory: (() -> Void)? = nil) {
@@ -32,6 +34,13 @@ public struct SummaryCard: View {
                 Text(summary.mode == "live" ? "Total result (live)" : summary.mode == "paper" ? "Total result (paper)" : "Total result")
                     .font(.ui(11, weight: .medium)).foregroundStyle(.secondary)
                 Spacer()
+                if !expanded, let showHistory {
+                    Button(action: showHistory) {
+                        Image(systemName: "chart.xyaxis.line").font(.ui(11, weight: .semibold)).foregroundStyle(Color.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Opens the profit chart with every buy and sale – per bot, each one can be switched on and off.")
+                }
                 if liveAllowed {
                     Badge(text: "LIVE", color: .profit, icon: "bolt.fill")
                         .help("Live trading is active – bots trade with real money")
@@ -39,10 +48,49 @@ public struct SummaryCard: View {
                     Badge(text: "PAPER MODE", color: .paper, icon: "testtube.2")
                         .help("All orders are only simulated. Live trading: Settings → Trading mode")
                 }
+                Image(systemName: "chevron.down")
+                    .font(.ui(10, weight: .semibold)).foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(expanded ? 180 : 0))
             }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.snappy(duration: 0.25)) { expanded.toggle() } }
             // The headline: what DipAgent has earned or lost in total (realized + open, after fees).
-            PnLText(value: result?.total ?? 0, currency: currency, font: .ui(28, weight: .bold, design: .rounded), calmLosses: true)
-                .help("Realized plus open result of all bots, fees already deducted.")
+            HStack(alignment: .lastTextBaseline) {
+                PnLText(value: result?.total ?? 0, currency: currency, font: .ui(expanded ? 28 : 24, weight: .bold, design: .rounded), calmLosses: true)
+                    .help("Realized plus open result of all bots, fees already deducted.")
+                Spacer()
+                if !expanded {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("Today").font(.ui(10)).foregroundStyle(.secondary)
+                        PnLText(value: result?.today ?? 0, currency: currency, font: .ui(12.5, weight: .semibold, design: .rounded), calmLosses: true)
+                    }
+                }
+            }
+            if expanded {
+                details(result, currency)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        // always the neutral accent: a green tint behind green profit numbers made them hard to read
+                        colors: [Color.accentColor.opacity(0.14), Color.accentColor.opacity(0.06)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        )
+    }
+
+    /// Everything beyond the headline – shown when the card is expanded.
+    @ViewBuilder
+    private func details(_ result: CurrencyTotal?, _ currency: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 0) {
                 metric("Realized", result?.realized ?? 0, currency)
                 metric("Open", result?.unrealized ?? 0, currency)
@@ -121,21 +169,7 @@ public struct SummaryCard: View {
                     .help("Cash on the exchange plus the current value of all open live positions.")
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        // always the neutral accent: a green tint behind green profit numbers made them hard to read
-                        colors: [Color.accentColor.opacity(0.14), Color.accentColor.opacity(0.06)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     private var balanceTitle: String { isDemo ? String(localized: "Balance (demo)") : String(localized: "Balance on Revolut X") }
