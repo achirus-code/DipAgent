@@ -952,3 +952,28 @@ async def test_the_pause_also_follows_a_buy(tmp_path: Path):
     ex.now += 30 * 60_000
     await engine.tick()
     assert len(trades_of(db.get_bot(bot_id)["state"])) == 2
+
+
+def test_reprice_paper_fees(tmp_path):
+    from decimal import Decimal as D
+    from app.db import Database
+    db = Database(tmp_path / "t.db")
+    bot = db.create_bot("b", "dip", "BTC-EUR", {}, True, True)
+    db.update_bot(bot, state={"positions": [{"qty": "0.09991", "cost": "100", "opened_at": 1, "peak": "1000", "paper": True, "id": "a"}]})
+    # booked with 0.09 % on both sides: 100 € → 0.09991 BTC @ 1000, sale of 0.05 BTC @ 1100
+    db.add_trade(bot_id=bot, bot_name="b", symbol="BTC-EUR", side="buy", price="1000", base_qty="0.09991",
+                 quote_amount="100", fee="0.09", pnl=None, paper=1, reason="", position_id="a")
+    db.add_trade(bot_id=bot, bot_name="b", symbol="BTC-EUR", side="sell", price="1100", base_qty="0.05",
+                 quote_amount="54.95", fee="0.055", pnl="4.9", paper=1, reason="", position_id="a")
+    old = {"buy": 0.0009, "sell": 0.0009}
+    new = {"buy": 0.0, "sell": 0.0009}
+    assert db.reprice_paper(old, new) == 2
+    buy, sell = sorted(db.list_trades(), key=lambda t: t["id"])
+    assert D(buy["fee"]) == 0 and abs(D(buy["base_qty"]) - D("0.1")) < D("0.0000001")
+    assert abs(D(sell["base_qty"]) - D("0.050045")) < D("0.0000001")
+    gross = D(sell["base_qty"]) * 1100
+    assert abs(D(sell["quote_amount"]) - gross * D("0.9991")) < D("0.0001")
+    assert abs(D(sell["pnl"]) - (D(sell["quote_amount"]) - D("50.05"))) < D("0.0001")
+    pos = db.get_bot(bot)["state"]["positions"][0]
+    assert abs(D(pos["qty"]) - D("0.1")) < D("0.0000001") and pos["cost"] == "100"
+    assert db.reprice_paper(new, new) == 0

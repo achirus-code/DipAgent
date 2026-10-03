@@ -167,6 +167,8 @@ class Engine:
         if not self._acquire_instance_lock():
             return
         log.info("Engine started (exchange: %s, interval: %ss)", self.exchange.name, self.settings.tick_seconds)
+        async with self._tick_lock:
+            self.apply_paper_fees()
         while True:
             try:
                 async with self._tick_lock:
@@ -178,6 +180,25 @@ class Engine:
             except asyncio.TimeoutError:
                 pass
             self._wake.clear()
+
+    def paper_fee(self, side: str) -> Decimal:
+        """Fee rate the simulation charges for a ``buy`` or ``sell`` (settings, default: Revolut X taker rate on sells)."""
+        return Decimal(str(self.db.get_paper_fees(float(self.settings.taker_fee))[side]))
+
+    def sell_fee_rate(self, bot: dict) -> float:
+        """The rate a sale of this bot's trades is charged – strategies use it for break-even and net profit."""
+        return float(self.paper_fee("sell")) if self.is_paper(bot) else float(self.settings.taker_fee)
+
+    def apply_paper_fees(self) -> int:
+        """Rebook the simulated trades if the fee settings differ from the rates they were booked with."""
+        taker = float(self.settings.taker_fee)
+        applied = self.db.get_setting("paper_fees_applied") or {"buy": taker, "sell": taker}  # before 1.17.1: taker both
+        target = self.db.get_paper_fees(taker)
+        count = self.db.reprice_paper(applied, target)
+        self.db.set_setting("paper_fees_applied", target)
+        if count:
+            log.info("Simulated trades rebooked with fees buy %s / sell %s (%d trades)", target["buy"], target["sell"], count)
+        return count
 
     def wake(self) -> None:
         self._wake.set()
@@ -349,7 +370,7 @@ class Engine:
         params = strategy.normalize(bot["params"])
 
         def context(position: Position | None) -> Context:
-            return Context(params, position, state, view, quote, float(self.settings.taker_fee),
+            return Context(params, position, state, view, quote, self.sell_fee_rate(bot),
                            journal=lambda entry: self.db.add_ai_decision(bot_id=bot["id"], **entry))
 
         if strategy.accumulates:  # savings plan: one position that every buy adds to
@@ -441,7 +462,7 @@ class Engine:
         """Sell one trade – unless it is a target rule that would realize a loss. Returns (sold, status)."""
         # Safety net: a target rule never sells at a loss. Fees, cent rounding and the sell fee are included –
         # strategies compare the gross profit, which a 2 € order can lose to a fee rounded up to 0.01.
-        net = position.net_proceeds(view.bid, float(self.settings.taker_fee), quote)
+        net = position.net_proceeds(view.bid, float(self.paper_fee("sell")) if position.paper else float(self.settings.taker_fee), quote)
         if not sell.stop and net < position.cost:
             return False, m("engine.hold_no_loss", net=money(net, quote), cost=money(position.cost, quote))
         return True, await self._sell(bot, state, view, sell.reason, position)
@@ -638,7 +659,7 @@ class Engine:
             pair = await self.exchange.pair(bot["symbol"])
             price = view.bid
             gross = open_position.qty * price
-            fee = gross * self.settings.taker_fee
+            fee = gross * self.paper_fee("sell")
             self._record_sell(bot, state, pair, open_position.qty, gross - fee, price, fee, None, True,
                               m("engine.mode_changed_close"), position_id=open_position.id)
         pair = await self.exchange.pair(bot["symbol"])
@@ -661,7 +682,7 @@ class Engine:
 
             if self.is_paper(bot):
                 price = view.ask
-                fee = quote_size * self.settings.taker_fee
+                fee = quote_size * self.paper_fee("buy")
                 bought = (quote_size - fee) / price
                 return self._record_buy(bot, state, pair, bought, quote_size, price, fee, None, True, reason)
 
@@ -681,7 +702,7 @@ class Engine:
         if position.paper:  # sell the way it was bought – never "simulate" selling real coins
             price = view.bid
             gross = amount * price
-            fee = gross * self.settings.taker_fee
+            fee = gross * self.paper_fee("sell")
             return self._record_sell(bot, state, pair, amount, gross - fee, price, fee, None, True, reason,
                                      position_id=position.id)
 

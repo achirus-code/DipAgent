@@ -329,12 +329,12 @@ class MockExchange(Exchange):
         base, quote = symbol.split("-")
         t = await self.ticker(symbol)
         if side == "buy":
-            spend = quote_size if quote_size is not None else base_size * t.ask * (1 + self.fee)
+            spend = quote_size if quote_size is not None else base_size * t.ask
             if self._balances.get(quote, D0) < spend:
                 raise Problem("err.not_enough", currency=quote)
-            amount = spend / (1 + self.fee)
+            amount = spend  # Revolut X charges no fee on buys, only on sells
             qty = (amount / t.ask).quantize(Decimal("0.00000001"))
-            fee = spend - amount
+            fee = D0
             self._balances[quote] = self._balances.get(quote, D0) - spend
             self._balances[base] = self._balances.get(base, D0) + qty
             price = t.ask

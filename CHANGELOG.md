@@ -2,6 +2,19 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.17.1] – 2026-10-03
+
+### Fixed
+
+- **Paper mode: no fee on buys.** Revolut X charges nothing for a buy placed as a maker order, but the simulation
+  charged the taker fee on buys too.
+
+### Added
+
+- **Paper mode fees are adjustable** under Settings, prefilled with buy 0 % / sell 0.09 %. Changing a fee rebooks all
+  simulated trades and open simulated positions (coins bought, fees, proceeds, profit); live trades are untouched.
+  Existing simulated trades are corrected once on the first start of this version.
+
 ## [1.17.0] – 2026-10-03
 
 ### Added

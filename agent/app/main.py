@@ -31,7 +31,7 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES, has_position
 from .strategies.ai import AiStrategy
 
-VERSION = "1.17.0"
+VERSION = "1.17.1"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -139,6 +139,11 @@ class LimitsIn(BaseModel):
     max_open_positions: int = Field(ge=0, le=100)
     max_total_invested: float = Field(ge=0)
     one_position_per_symbol: bool
+
+
+class PaperFeesIn(BaseModel):
+    buy: float = Field(ge=0, le=0.1)  # fraction: 0.0009 = 0.09 %
+    sell: float = Field(ge=0, le=0.1)
 
 
 class BotIn(BaseModel):
@@ -332,6 +337,25 @@ async def set_live_trading(body: LiveTradingIn, lang: str = Depends(get_lang)) -
             result["message"] = render(result["message"], lang)
     engine.wake()
     return {**_status(lang), "closed_positions": closed}
+
+
+# --- paper-mode fees -------------------------------------------------------------------------
+
+
+@api.get("/paper-fees")
+async def get_paper_fees() -> dict[str, float]:
+    return db.get_paper_fees(float(settings.taker_fee))
+
+
+@api.put("/paper-fees")
+async def put_paper_fees(body: PaperFeesIn) -> dict[str, float]:
+    async with engine.paused():  # trades and open positions are rebooked – no tick may write meanwhile
+        db.set_paper_fees(body.model_dump())
+        engine.apply_paper_fees()
+        engine.reset_caches()
+    db.add_event(None, "info", m("event.paper_fees_changed"))
+    engine.wake()
+    return await get_paper_fees()
 
 
 # --- limits ----------------------------------------------------------------------------------

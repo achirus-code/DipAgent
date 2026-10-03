@@ -457,6 +457,12 @@ struct Limits: Codable, Equatable {
     }
 }
 
+/// Fees the simulation (paper mode) charges, as fractions (0.0009 = 0.09 %).
+struct PaperFees: Codable, Equatable {
+    var buy: Double
+    var sell: Double
+}
+
 struct BotInput: Encodable {
     var name: String
     var strategy: String

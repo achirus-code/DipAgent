@@ -405,3 +405,9 @@
 "It is no longer among the loaded trades." = "Er ist nicht mehr unter den geladenen Trades.";
 "Of it sold here" = "Davon hier verkauft";
 "Of it from this buy" = "Davon aus diesem Kauf";
+
+"Paper mode fees" = "Gebühren im Papier-Modus";
+"Buy fee" = "Kaufgebühr";
+"Sell fee" = "Verkaufsgebühr";
+"Save fees" = "Gebühren speichern";
+"Revolut X currently charges 0 % on buys and 0.09 % on sells. Changing a fee rebooks all simulated trades; live trades stay as they are." = "Revolut X verlangt aktuell 0 % beim Kauf und 0,09 % beim Verkauf. Eine Änderung berechnet alle simulierten Trades neu; Live-Trades bleiben unverändert.";

@@ -30,6 +30,10 @@ struct SettingsView: View {
                 LimitsSection(limits: limits)
             }
 
+            if store.isConnected, let fees = store.paperFees {
+                PaperFeesSection(fees: fees)
+            }
+
             // App
             VStack(alignment: .leading, spacing: 6) {
                 SectionLabel("App")

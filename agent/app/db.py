@@ -7,6 +7,7 @@ import os
 import sqlite3
 import threading
 import time
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -85,6 +86,11 @@ DEFAULT_LIMITS: dict[str, Any] = {
     "max_total_invested": 0.0,      # sum of all open positions in quote currency (0 = unlimited)
     "one_position_per_symbol": True,  # only one bot at a time may hold a given pair
 }
+
+
+# Revolut X: 0 % maker, 0.09 % taker. The simulation (paper mode) buys with a fee-free order and sells at the taker
+# rate; the user can change both rates in the settings.
+DEFAULT_PAPER_FEES: dict[str, float] = {"buy": 0.0, "sell": 0.0009}
 
 
 def now_ms() -> int:
@@ -216,6 +222,71 @@ class Database:
                     "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                     (key, json.dumps(value)),
                 )
+
+    # --- Paper-mode fees --------------------------------------------------
+
+    def get_paper_fees(self, default_sell: float | None = None) -> dict[str, float]:
+        """Fee rates (0.0009 = 0.09 %) the simulation charges for buys and sells."""
+        defaults = dict(DEFAULT_PAPER_FEES)
+        if default_sell is not None:
+            defaults["sell"] = default_sell
+        stored = self.get_setting("paper_fees") or {}
+        return {side: float(stored.get(side, rate)) for side, rate in defaults.items()}
+
+    def set_paper_fees(self, fees: dict[str, float]) -> None:
+        self.set_setting("paper_fees", {"buy": float(fees["buy"]), "sell": float(fees["sell"])})
+
+    def reprice_paper(self, old: dict[str, float], new: dict[str, float]) -> int:
+        """Rebook all simulated trades as if ``new`` fees had always applied (``old`` = the rates they were booked with).
+
+        The amount spent on a buy and the price of every trade stay as they are – what changes is how much of the
+        money became coins (buys) and what a sale leaves after the fee. Open trades get the new coin quantity,
+        sales their new proceeds and profit. Returns the number of rebooked trades.
+        """
+        if old == new:
+            return 0
+        d = lambda x: Decimal(str(x))  # noqa: E731
+        k = (1 - d(new["buy"])) / (1 - d(old["buy"]))  # coins per unit of money, new / old
+        step = Decimal("0.00000001")
+        with self._lock:
+            self._conn.execute("BEGIN")
+            try:
+                rows = self._conn.execute("SELECT * FROM trades WHERE paper = 1").fetchall()
+                for r in rows:
+                    price, qty_, amount, pnl = d(r["price"]), d(r["base_qty"]), d(r["quote_amount"]), r["pnl"]
+                    if r["side"] == "buy":
+                        new_qty = (qty_ * k).quantize(step)
+                        self._conn.execute(
+                            "UPDATE trades SET base_qty = ?, fee = ? WHERE id = ?",
+                            (str(new_qty), str(amount * d(new["buy"])), r["id"]),
+                        )
+                    else:
+                        cost_part = amount - d(pnl) if pnl is not None else None
+                        new_qty = (qty_ * k).quantize(step)
+                        gross = new_qty * price
+                        fee = gross * d(new["sell"])
+                        proceeds = gross - fee
+                        self._conn.execute(
+                            "UPDATE trades SET base_qty = ?, quote_amount = ?, fee = ?, pnl = ? WHERE id = ?",
+                            (str(new_qty), str(proceeds), str(fee),
+                             str(proceeds - cost_part) if cost_part is not None else None, r["id"]),
+                        )
+                for bot in self._conn.execute("SELECT id, state FROM bots").fetchall():
+                    state = json.loads(bot["state"])
+                    changed = False
+                    for key in ("positions", "position"):
+                        raw = state.get(key)
+                        for pos in ([raw] if isinstance(raw, dict) else raw or []):
+                            if pos.get("paper", True):
+                                pos["qty"] = str((d(pos["qty"]) * k).quantize(step))
+                                changed = True
+                    if changed:
+                        self._conn.execute("UPDATE bots SET state = ? WHERE id = ?", (json.dumps(state), bot["id"]))
+                self._conn.execute("COMMIT")
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+        return len(rows)
 
     # --- Trades -----------------------------------------------------------
 

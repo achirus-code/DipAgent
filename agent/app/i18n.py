@@ -436,6 +436,7 @@ CATALOG: dict[str, L] = {
     "event.bot_started": L("Bot started", "Bot gestartet"),
     "event.bot_stopped": L("Bot stopped", "Bot gestoppt"),
     "event.limits_changed": L("Limits changed", "Limits geändert"),
+    "event.paper_fees_changed": L("Simulation fees changed – simulated trades rebooked", "Simulationsgebühren geändert – simulierte Trades neu berechnet"),
     "event.keypair": L("New Revolut X key pair generated", "Neues Revolut-X-Schlüsselpaar erzeugt"),
     "event.revx_connected": L("Revolut X connected", "Revolut X verbunden"),
     "event.revx_removed": L("Revolut X access removed", "Revolut-X-Zugang entfernt"),

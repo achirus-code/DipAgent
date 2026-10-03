@@ -49,6 +49,7 @@ final class AppStore {
     var pairs: [String] = []
     var balances: [Balance] = []
     var limits: Limits?
+    var paperFees: PaperFees?
     var exchangeInfo: ExchangeInfo?
     var lastUpdate: Date?
     /// Set by the AppDelegate. Balances are only fetched while the panel is open – nobody sees them otherwise,
@@ -156,7 +157,7 @@ final class AppStore {
         pollTask?.cancel()
         client = nil
         connection = .notConfigured
-        bots = []; trades = []; summary = nil; status = nil; balances = []; limits = nil; exchangeInfo = nil
+        bots = []; trades = []; summary = nil; status = nil; balances = []; limits = nil; paperFees = nil; exchangeInfo = nil
     }
 
     /// Connected: refresh every `refreshInterval`. Unreachable: reconnect after `retryDelay` (5 s, then doubling
@@ -209,6 +210,7 @@ final class AppStore {
                 }
             }
             limits = (try? await client.get("/limits")) ?? limits
+            paperFees = (try? await client.get("/paper-fees")) ?? paperFees
             exchangeInfo = (try? await client.get("/exchange")) ?? exchangeInfo
             if pairs.isEmpty { pairs = (try? await client.get("/pairs")) ?? [] }
             lastUpdate = Date()
@@ -254,6 +256,12 @@ final class AppStore {
     func saveLimits(_ newLimits: Limits) async throws {
         guard let client else { return }
         limits = try await client.send("PUT", "/limits", body: newLimits)
+        await refresh()
+    }
+
+    func savePaperFees(_ fees: PaperFees) async throws {
+        guard let client else { return }
+        paperFees = try await client.send("PUT", "/paper-fees", body: fees)
         await refresh()
     }
 
